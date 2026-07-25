@@ -53,6 +53,9 @@ final class Engine {
         }
         guard tap.start() else { return false }
         self.tap = tap
+        // A grant can arrive after the user already paused; starting must not
+        // silently resume observation.
+        tap.setEnabled(isEnabled)
         return true
     }
 
@@ -143,6 +146,10 @@ final class Engine {
         // the cursor may have changed during the settle delay.
         guard let pid = AX.pid(of: clicked), !isExcluded(pid: pid) else { return }
 
+        // Chromium keeps its web-content AX tree off until an assistive client
+        // asks. Requested once per process; takes effect for later gestures.
+        AX.enableManualAccessibilityIfNeeded(pid: pid)
+
         switch AX.findSelection(
             from: clicked, maxDepth: config.maxAncestorWalk, maxCharacters: config.maxCharacters)
         {
@@ -152,6 +159,11 @@ final class Engine {
         case .secure:
             // A password field was on the path. Copy nothing, and do not fall
             // back to synthesizing a keystroke.
+            return
+        case .tooLarge:
+            // A selection exists, it is just bigger than the cap. Falling
+            // through to Cmd+C here would copy it anyway, via the destructive
+            // path, defeating the cap entirely.
             return
         case .none:
             break
@@ -164,7 +176,7 @@ final class Engine {
         guard isSafeToSynthesizeCopy(targetPID: pid) else { return }
 
         fallbackQueue.async { [weak self] in
-            self?.copyFallback()
+            self?.copyFallback(targetPID: pid)
         }
     }
 
@@ -209,16 +221,19 @@ final class Engine {
 
     /// Synthesizes ⌘C, then restores the previous clipboard only if the copy
     /// actually damaged it.
-    ///
-    /// All pasteboard access here happens on this one queue, so reads and
-    /// writes are not split across threads.
-    private func copyFallback() {
+    private func copyFallback(targetPID: pid_t) {
         let snapshot = Clipboard.snapshot()
 
         // Extending a selection means Shift is often physically held. Posting
         // ⌘C then risks the app receiving ⇧⌘C, a different shortcut. Read the
         // modifier state rather than tapping keyboard events.
         waitForModifiersToClear(timeout: 0.15)
+
+        // Re-check immediately before posting. The safety checks ran on the
+        // engine queue; during the modifier wait, secure input can switch on,
+        // focus can move to a password field, or another app can come forward —
+        // and the keystroke goes wherever focus is *now*.
+        guard isSafeToSynthesizeCopy(targetPID: targetPID) else { return }
 
         postCommandC()
 
@@ -251,7 +266,7 @@ final class Engine {
         guard changed else { return }
 
         if produced == nil {
-            Clipboard.restore(snapshot)
+            DispatchQueue.main.async { Clipboard.restore(snapshot) }
         }
     }
 

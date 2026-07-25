@@ -9,10 +9,26 @@ enum AX {
     /// One hung app must not wedge the worker queue.
     static let messagingTimeout: Float = 0.25
 
-    /// Roles worth *asking* for a selection. Deliberately broad: browsers and
-    /// PDF views hit-test to a deep leaf (a link, a heading, a cell) while the
-    /// selection itself lives on an ancestor, so we walk up from whatever we
-    /// land on.
+    /// Roles the *clicked* element may have for us to consider the gesture a
+    /// text selection at all.
+    ///
+    /// This gate matters: without it, a double-click on a button or image whose
+    /// ancestor happens to answer `AXSelectedText` would return that ancestor's
+    /// unrelated, pre-existing selection and copy it — reintroducing exactly the
+    /// stale-clipboard bug the hit test was supposed to prevent.
+    static let leafTextRoles: Set<String> = [
+        kAXTextAreaRole as String,
+        kAXTextFieldRole as String,
+        kAXStaticTextRole as String,
+        kAXComboBoxRole as String,
+        "AXWebArea",
+        "AXHeading",
+        "AXLink",
+    ]
+
+    /// Roles worth *asking* for a selection while walking up. Broader than the
+    /// leaf gate, because browsers and PDF views implement the selection on a
+    /// generic container above the text node.
     static let readableRoles: Set<String> = [
         kAXTextAreaRole as String,
         kAXTextFieldRole as String,
@@ -169,11 +185,62 @@ enum AX {
         return text
     }
 
+    // MARK: - Text markers (WebKit)
+
+    /// WebKit exposes web-content selections through text markers only: Safari's
+    /// AXWebArea answers neither `AXSelectedText` nor `AXSelectedTextRange`, but
+    /// does answer `AXSelectedTextMarkerRange`. Without these two attributes,
+    /// browsers silently produce nothing.
+    static let selectedTextMarkerRangeAttribute = "AXSelectedTextMarkerRange"
+    static let stringForTextMarkerRangeAttribute = "AXStringForTextMarkerRange"
+
+    static func selectedTextViaMarkers(_ element: AXUIElement) -> String? {
+        guard let markerRange = attribute(element, selectedTextMarkerRangeAttribute) else {
+            return nil
+        }
+        var result: CFTypeRef?
+        let status = AXUIElementCopyParameterizedAttributeValue(
+            element,
+            stringForTextMarkerRangeAttribute as CFString,
+            markerRange,
+            &result)
+        guard status == .success, let result else { return nil }
+        guard CFGetTypeID(result) == CFStringGetTypeID() else { return nil }
+        let text = result as! CFString as String
+        return text.isEmpty ? nil : text
+    }
+
+    /// Chromium-based apps (Chrome, Electron) keep their web-content
+    /// accessibility tree switched off until an assistive client asks for it.
+    /// Without this the hit test lands on a native container with no selection
+    /// attributes at all.
+    ///
+    /// Setting it is idempotent and cheap; we only try once per process.
+    private static var manualAccessibilityRequested = Set<pid_t>()
+    private static let manualAccessibilityLock = NSLock()
+
+    static func enableManualAccessibilityIfNeeded(pid: pid_t) {
+        manualAccessibilityLock.lock()
+        let alreadyDone = manualAccessibilityRequested.contains(pid)
+        if !alreadyDone { manualAccessibilityRequested.insert(pid) }
+        manualAccessibilityLock.unlock()
+        guard !alreadyDone else { return }
+
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, messagingTimeout)
+        AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+    }
+
     enum SelectionOutcome {
         /// A selection was read.
         case text(String)
         /// A password field was encountered; abort everything, copy nothing.
         case secure
+        /// A selection exists but exceeds the size cap. Distinct from `.none`
+        /// because it must NOT fall through to the Cmd+C fallback — doing so
+        /// would copy the very selection the cap exists to avoid, by the more
+        /// destructive route.
+        case tooLarge
         /// Nothing readable found.
         case none
     }
@@ -192,26 +259,47 @@ enum AX {
     static func findSelection(
         from element: AXUIElement, maxDepth: Int, maxCharacters: Int
     ) -> SelectionOutcome {
+        // Role and subrole are fetched once per node and reused. Each AX call is
+        // cross-process IPC, so re-asking per predicate is what made the walk
+        // slow enough to matter.
+        let leafRole = role(element)
+        let leafSubrole = subrole(element)
+
+        if isSecure(role: leafRole, subrole: leafSubrole) { return .secure }
+
+        // The click must have landed on something text-bearing. Otherwise we do
+        // not walk at all: an ancestor's selection would not belong to this
+        // gesture.
+        guard let leafRole, leafTextRoles.contains(leafRole) else { return .none }
+
         var current: AXUIElement? = element
         var depth = 0
 
         while let node = current, depth < maxDepth {
+            let nodeRole = depth == 0 ? leafRole : role(node)
+            let nodeSubrole = depth == 0 ? leafSubrole : subrole(node)
+
             // Checked at every level: a secure field anywhere on the path means
             // stop entirely rather than continue up to a readable ancestor.
-            if isSecure(node) { return .secure }
+            if isSecure(role: nodeRole, subrole: nodeSubrole) { return .secure }
 
-            if isReadableRole(node) {
-                let range = selectedRange(node)
-
-                if let range, range.length > maxCharacters { return .none }
-
+            if let nodeRole, readableRoles.contains(nodeRole) {
                 if let text = selectedText(node), !text.isEmpty {
-                    return text.count <= maxCharacters ? .text(text) : .none
+                    return text.count <= maxCharacters ? .text(text) : .tooLarge
                 }
-                if let range, range.length > 0, let text = string(node, forRange: range),
-                    !text.isEmpty
-                {
-                    return .text(text)
+
+                // Only fetch the range once the cheap attribute has failed.
+                if let range = selectedRange(node), range.length > 0 {
+                    if range.length > maxCharacters { return .tooLarge }
+                    if let text = string(node, forRange: range), !text.isEmpty {
+                        return .text(text)
+                    }
+                }
+
+                // WebKit answers neither of the above; markers are its only
+                // route.
+                if let text = selectedTextViaMarkers(node) {
+                    return text.count <= maxCharacters ? .text(text) : .tooLarge
                 }
             }
 
@@ -219,6 +307,12 @@ enum AX {
             depth += 1
         }
         return .none
+    }
+
+    private static func isSecure(role: String?, subrole: String?) -> Bool {
+        if let role, secureRoles.contains(role) { return true }
+        if let subrole, secureRoles.contains(subrole) { return true }
+        return false
     }
 
     static var isTrusted: Bool { AXIsProcessTrusted() }

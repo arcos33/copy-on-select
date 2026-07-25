@@ -63,9 +63,24 @@ struct Config: Codable {
         maxCharacters: 1_000_000,
         enableCopyFallback: true,
         dragThreshold: 4.0,
-        maxAncestorWalk: 6,
+        // Measured: a hit test over text on a live Safari page lands 8 parent
+        // hops below the AXWebArea that owns the selection, so a shallow walk
+        // silently produces nothing in browsers.
+        maxAncestorWalk: 16,
         markClipboardConcealed: false
     )
+
+    /// Keeps user-supplied values in a range where the app still behaves.
+    /// `maxAncestorWalk: 0` would make it a silent no-op; `maxCharacters: 0`
+    /// would send every selection to the Cmd+C fallback.
+    func clamped() -> Config {
+        var copy = self
+        copy.settleMilliseconds = min(max(settleMilliseconds, 0), 5000)
+        copy.maxCharacters = max(maxCharacters, 1)
+        copy.dragThreshold = min(max(dragThreshold, 0), 200)
+        copy.maxAncestorWalk = min(max(maxAncestorWalk, 1), 64)
+        return copy
+    }
 
     /// Every key is optional on decode, falling back to the default. A config
     /// written against an older version keeps working when new keys are added,
@@ -122,7 +137,7 @@ struct Config: Codable {
     static func load() -> Config {
         guard let data = try? Data(contentsOf: fileURL) else { return .default }
         do {
-            return try JSONDecoder().decode(Config.self, from: data)
+            return try JSONDecoder().decode(Config.self, from: data).clamped()
         } catch {
             FileHandle.standardError.write(
                 "copy-on-select: config at \(fileURL.path) is invalid (\(error)); using defaults\n"

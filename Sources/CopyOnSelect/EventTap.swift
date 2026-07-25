@@ -13,6 +13,10 @@ final class EventTap {
     private var port: CFMachPort?
     private var source: CFRunLoopSource?
     private let handler: Handler
+    /// What the user asked for. The kernel can disable the tap behind our back,
+    /// and the re-enable path must restore *this* state rather than
+    /// unconditionally switching observation back on while paused.
+    private var desiredEnabled = true
 
     init(handler: @escaping Handler) {
         self.handler = handler
@@ -67,6 +71,7 @@ final class EventTap {
 
     /// Pausing genuinely stops observation rather than filtering afterwards.
     func setEnabled(_ enabled: Bool) {
+        desiredEnabled = enabled
         guard let port else { return }
         CGEvent.tapEnable(tap: port, enable: enabled)
     }
@@ -90,7 +95,7 @@ final class EventTap {
     }
 
     private func reenable() {
-        guard let port else { return }
+        guard let port, desiredEnabled else { return }
         CGEvent.tapEnable(tap: port, enable: true)
     }
 }
