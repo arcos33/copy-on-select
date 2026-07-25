@@ -126,6 +126,38 @@ Consciously accepted for now; revisit if they bite.
 
 ---
 
+## Distribution (decide before publishing)
+
+The self-signed `copy-on-select-local` certificate is **local only** — it is
+worthless for distributing to anyone else. Since macOS Sequoia the old
+Control-click → Open bypass is gone, so an unsigned download means the user has
+to go to System Settings → Privacy & Security → Open Anyway with an admin
+password. Not a viable default experience.
+
+Ranked options:
+
+- [ ] **Homebrew formula (builds from source)** — the natural fit. One command,
+      and it *preserves* the build-it-yourself property the README argues for.
+      Needs only the **Command Line Tools**, not Xcode (verified: CLT ships
+      `swift`, `swiftc`, `swift-build`), and Homebrew requires CLT anyway — so
+      brew users need nothing extra.
+- [ ] **GitHub Actions + artifact attestation** — a Sigstore-signed statement
+      that a specific binary came from a specific workflow, repo and commit,
+      verified with `gh attestation verify`. Free, and default-on for public
+      repos. **This is the direct answer to the README's own complaint** that
+      signing and notarization never prove a binary matches its source — the
+      project would demonstrate its argument rather than just state it.
+- [ ] **Homebrew bottles** — prebuilt binaries from CI attached to Releases, so
+      `brew install` does no compiling. Formula installs avoid the quarantine
+      treatment casks get. Pair with attestation so the prebuilt binary is still
+      verifiable. (Confirm the quarantine behaviour when implementing.)
+- [ ] **Apple notarization ($99/yr)** — only if it gets popular. Buys the
+      frictionless double-click *and* removes the certificate wizard from
+      `install.md` (a Developer ID gives the stable identity that preserves the
+      Accessibility grant). But it buys less here than for most apps, since the
+      user must visit System Settings for Accessibility regardless — and alone
+      it reintroduces "trust my build", so it should be paired with attestation.
+
 ## Before publishing
 
 - [ ] **Review the README text with Eugene.** Required, not optional.

@@ -28,9 +28,19 @@ Nothing else is modified. The program makes no network connections.
 swift --version
 ```
 
-Requires Swift 6.1+ and macOS 13+. If `swift` is missing, ask your user to
-install Xcode or the Command Line Tools (`xcode-select --install`) — that is a
-GUI/admin action you cannot perform.
+Requires Swift 6.1+ and macOS 13+.
+
+If `swift` is missing, your user needs the **Command Line Tools** — not the full
+Xcode. The Command Line Tools ship the complete Swift toolchain including
+SwiftPM (`swift`, `swiftc`, `swift-build`), and are roughly 1–2 GB rather than
+Xcode's ~15 GB. Ask them to run:
+
+```sh
+xcode-select --install
+```
+
+That opens a system installer dialog, so it is a GUI action you cannot complete
+for them. Anyone who already has Homebrew already has these.
 
 **Verify**
 
