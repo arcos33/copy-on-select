@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.copy-on-select</string>
+
+    <!-- Replace REPLACE_WITH_INSTALL_PATH with the absolute path of the
+         installed binary, e.g. /Users/you/Applications/copy-on-select.
+         The accessibility grant is bound to this exact path plus the code
+         signature, so it must match the binary you granted access to. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>REPLACE_WITH_INSTALL_PATH</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ProcessType</key>
+    <string>Interactive</string>
+</dict>
+</plist>
