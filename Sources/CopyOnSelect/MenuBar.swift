@@ -31,9 +31,9 @@ final class MenuBar: NSObject, NSMenuDelegate {
         }
     }
 
-    /// Menu bar icon point size. The system default is around 14; this is
-    /// deliberately larger.
-    private static let iconPointSize: CGFloat = 17
+    /// Menu bar icon point size, tuned by eye against neighbouring status
+    /// items.
+    private static let iconPointSize: CGFloat = 14
 
     private func updateButton() {
         guard let button = statusItem?.button else { return }
