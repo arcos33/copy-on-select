@@ -6,6 +6,21 @@ You build it yourself from source you can read. It contains no networking code,
 execs no subprocesses (no `Process`, no `posix_spawn`, no `NSAppleScript`), and
 writes nothing to disk except the config file you ask it to create.
 
+**Why build another one of these?** Because a tool that watches everything you
+select needs the most invasive permission macOS grants, and every existing
+option asks you to take its behaviour on faith. The closed-source ones (PopClip,
+Keyboard Maestro) give you a binary and a privacy policy. The open-source ones
+are better, but not actually verifiable: **you can read the source on GitHub and
+still not know that the binary you downloaded was built from it.** Code
+signing, notarization, and checksums all authenticate the publisher and the
+bytes — none of them prove the bytes came from that source. Closing that gap
+takes reproducible builds, which almost nobody offers, or compiling it yourself,
+which is only meaningful if the code is small enough to actually read.
+
+So this is small enough to actually read, has no network capability to begin
+with, and you compile it yourself — which removes the gap rather than asking you
+to trust across it.
+
 ---
 
 ## Why this exists, and why it is built this way
