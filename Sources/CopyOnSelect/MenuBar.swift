@@ -33,7 +33,27 @@ final class MenuBar: NSObject, NSMenuDelegate {
 
     /// Menu bar icon point size, tuned by eye against neighbouring status
     /// items.
-    private static let iconPointSize: CGFloat = 14
+    private static let iconPointSize: CGFloat = 13.6
+
+    /// Points to shift the icon downwards. The status item centres the image in
+    /// its button, so the shift is achieved by padding the canvas rather than
+    /// by moving the drawing.
+    private static let iconDropPoints: CGFloat = 2
+
+    /// Returns the image inside a taller transparent canvas, with the glyph
+    /// held at the bottom. Once centred by the status item, the extra headroom
+    /// leaves the glyph sitting `iconDropPoints` lower.
+    private static func nudgedDown(_ image: NSImage) -> NSImage {
+        let base = image.size
+        guard base.width > 0, base.height > 0 else { return image }
+        let padded = NSSize(width: base.width, height: base.height + iconDropPoints * 2)
+        let result = NSImage(size: padded, flipped: false) { _ in
+            image.draw(in: NSRect(x: 0, y: 0, width: base.width, height: base.height))
+            return true
+        }
+        result.isTemplate = true
+        return result
+    }
 
     private func updateButton() {
         guard let button = statusItem?.button else { return }
@@ -57,7 +77,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
             .withSymbolConfiguration(config)
         {
             image.isTemplate = true
-            button.image = image
+            button.image = Self.nudgedDown(image)
             button.title = ""
         } else {
             // Older systems without the symbol: fall back to the glyph.
