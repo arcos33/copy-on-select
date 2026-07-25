@@ -1,5 +1,25 @@
 # Backlog
 
+---
+
+## ⚠️ TEMPORARY DEBUG STATE — clean this up before calling it done
+
+Everything in this section is scaffolding, not the product. **Check this list
+whenever debugging stops**, and delete the section once it is all reverted.
+
+| State | Where | Action to revert |
+|---|---|---|
+| `enableCopyFallback: false` | `~/Library/Application Support/copy-on-select/config.json` | Decide the real default, then either delete the file or write the intended config. **This is a live deviation from the shipped default.** |
+| Probe binaries + sources (`axprobe*`, `wkhelper*`, `upwalk`, `winlist`, `dump`, `probe4/5`) | session scratchpad under `/private/tmp/claude-501/…` | Delete. Session-isolated so harmless, but do not let any of it drift into the repo. |
+| Diagnostic logging, if added | `diagnostics` config key + log calls | Must be **off by default**, and must never log selection content — only timings, roles, and lengths. Consider removing entirely before publishing. |
+| Clipboard sentinels (`SENTINEL-…`) | the clipboard | Self-clearing; nothing to do. Just do not mistake one for real data. |
+| `wkhelper` GUI windows | were left running by a review agent | Already killed (2026-07-25). Re-check with `ps aux \| grep -i wkhelper` if odd windows appear. |
+
+Deliberately **not** temporary (leave these alone): the installed binary in
+`~/Applications`, the LaunchAgent, the `copy-on-select-local` certificate, and
+the Accessibility grant.
+
+
 Things worth doing the next time this gets rebuilt. Nothing here is urgent —
 the app works — so these are batched deliberately rather than triggering a
 rebuild each on their own.
