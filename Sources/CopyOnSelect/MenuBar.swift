@@ -4,7 +4,7 @@ import Foundation
 /// Minimal status-bar item: an off switch, a way to reach the config, and a
 /// visible health state. There is no preferences window; the config file is the
 /// UI.
-final class MenuBar: NSObject {
+final class MenuBar: NSObject, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private let engine: Engine
     private var healthTimer: Timer?
@@ -16,30 +16,50 @@ final class MenuBar: NSObject {
 
     func install() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.title = "⧉"
         item.button?.toolTip = "copy-on-select"
         statusItem = item
-        rebuildMenu()
 
-        // Accessibility can be revoked, and a tap can die. Showing that beats
-        // looking alive while doing nothing.
+        let menu = NSMenu()
+        // Rebuilt only when the user opens it, rather than on a timer.
+        menu.delegate = self
+        item.menu = menu
+
+        updateButton()
+        // The icon is the only always-visible signal, so it alone is polled.
         healthTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-            self?.rebuildMenu()
+            self?.updateButton()
         }
     }
 
-    private func rebuildMenu() {
-        guard let statusItem else { return }
-        let menu = NSMenu()
+    private func updateButton() {
+        guard let button = statusItem?.button else { return }
+        if !engine.isHealthy {
+            button.title = "⚠"
+        } else if engine.isEnabled {
+            button.title = "⧉"
+        } else {
+            // A combining slash renders unreliably in the menu bar; use a
+            // distinct glyph instead.
+            button.title = "◌"
+        }
+    }
 
-        let healthy = engine.isHealthy
-        statusItem.button?.title = healthy ? (engine.isEnabled ? "⧉" : "⧉̸") : "⚠"
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        updateButton()
 
-        let status = NSMenuItem(
-            title: healthy
-                ? (engine.isEnabled ? "Active" : "Paused")
-                : (AX.isTrusted ? "Event tap inactive" : "Accessibility not granted"),
-            action: nil, keyEquivalent: "")
+        let statusText: String
+        if !AX.isTrusted {
+            statusText = "Accessibility not granted"
+        } else if !engine.isEnabled {
+            statusText = "Paused"
+        } else if !engine.isTapActive {
+            statusText = "Event tap inactive"
+        } else {
+            statusText = "Active"
+        }
+
+        let status = NSMenuItem(title: statusText, action: nil, keyEquivalent: "")
         status.isEnabled = false
         menu.addItem(status)
         menu.addItem(.separator())
@@ -59,20 +79,20 @@ final class MenuBar: NSObject {
         let quit = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
-
-        statusItem.menu = menu
     }
 
     @objc private func toggleEnabled() {
         engine.setEnabled(!engine.isEnabled)
-        rebuildMenu()
+        updateButton()
     }
 
+    /// Writes a default config file if none exists, then reveals it. This is
+    /// the only file this app ever writes, and it never contains selection or
+    /// clipboard content.
     @objc private func revealConfig() {
         let url = Config.fileURL
-        let directory = url.deletingLastPathComponent()
         try? FileManager.default.createDirectory(
-            at: directory, withIntermediateDirectories: true)
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         if !FileManager.default.fileExists(atPath: url.path) {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

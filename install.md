@@ -81,7 +81,9 @@ If it prints `missing`, **stop** and give your user these instructions verbatim:
 Wait for confirmation. Then sign:
 
 ```sh
-codesign --force --sign copy-on-select-local .build/release/copy-on-select
+codesign --force --sign copy-on-select-local \
+  --identifier dev.copy-on-select \
+  .build/release/copy-on-select
 ```
 
 **Verify**
@@ -150,7 +152,13 @@ misleading; the authoritative signal is the app working in step 8.
 
 ## 6. Start at login
 
+Stop the copy you started by hand in step 5 first, or you will end up with two
+instances — two menu bar icons, two event taps, two processes racing to write
+the clipboard.
+
 ```sh
+pkill -f "$HOME/Applications/copy-on-select" 2>/dev/null
+
 sed "s|REPLACE_WITH_INSTALL_PATH|$HOME/Applications/copy-on-select|" \
   examples/dev.copy-on-select.plist > ~/Library/LaunchAgents/dev.copy-on-select.plist
 launchctl unload ~/Library/LaunchAgents/dev.copy-on-select.plist 2>/dev/null
@@ -236,8 +244,10 @@ Summarise for them:
   icon means Accessibility was revoked or the event tap died.
 - It overwrites the clipboard often. A clipboard manager (Maccy, Raycast) is
   worth pairing with it.
-- Clipboard writes are marked `org.nspasteboard.ConcealedType`, which
-  well-behaved clipboard managers and sync tools skip.
+- By default selections **do** appear in clipboard history. Setting
+  `markClipboardConcealed: true` in the config marks writes
+  `org.nspasteboard.ConcealedType`, which well-behaved clipboard managers and
+  sync services skip — better privacy, no history.
 - Rebuilding the app does **not** require re-granting Accessibility, thanks to
   the certificate from step 3 — as long as they sign each rebuild with it.
 

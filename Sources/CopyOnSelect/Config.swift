@@ -26,6 +26,18 @@ struct Config: Codable {
     /// Minimum drag distance, in points, to count as a selection drag.
     var dragThreshold: Double
 
+    /// How far up the accessibility tree to look for an element that can answer
+    /// "what is selected". Browsers and PDF views hit-test to a deep leaf while
+    /// implementing the selection on an ancestor.
+    var maxAncestorWalk: Int
+
+    /// Mark clipboard writes `org.nspasteboard.ConcealedType`. Well-behaved
+    /// clipboard managers and sync services skip concealed items — good for
+    /// privacy, but it also means selections will not appear in clipboard
+    /// history. Off by default so history still works; turn on if you would
+    /// rather selections never reach Universal Clipboard or a history app.
+    var markClipboardConcealed: Bool
+
     static let `default` = Config(
         excludedBundleIDs: [
             // Finder: a drag here is a file drag. A synthetic Cmd+C would put
@@ -50,8 +62,53 @@ struct Config: Codable {
         settleMilliseconds: 180,
         maxCharacters: 1_000_000,
         enableCopyFallback: true,
-        dragThreshold: 4.0
+        dragThreshold: 4.0,
+        maxAncestorWalk: 6,
+        markClipboardConcealed: false
     )
+
+    /// Every key is optional on decode, falling back to the default. A config
+    /// written against an older version keeps working when new keys are added,
+    /// instead of failing to decode and silently reverting everything —
+    /// including the user's exclusion list — to defaults.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = Config.default
+        excludedBundleIDs =
+            try container.decodeIfPresent([String].self, forKey: .excludedBundleIDs)
+            ?? fallback.excludedBundleIDs
+        settleMilliseconds =
+            try container.decodeIfPresent(Int.self, forKey: .settleMilliseconds)
+            ?? fallback.settleMilliseconds
+        maxCharacters =
+            try container.decodeIfPresent(Int.self, forKey: .maxCharacters) ?? fallback.maxCharacters
+        enableCopyFallback =
+            try container.decodeIfPresent(Bool.self, forKey: .enableCopyFallback)
+            ?? fallback.enableCopyFallback
+        dragThreshold =
+            try container.decodeIfPresent(Double.self, forKey: .dragThreshold)
+            ?? fallback.dragThreshold
+        maxAncestorWalk =
+            try container.decodeIfPresent(Int.self, forKey: .maxAncestorWalk)
+            ?? fallback.maxAncestorWalk
+        markClipboardConcealed =
+            try container.decodeIfPresent(Bool.self, forKey: .markClipboardConcealed)
+            ?? fallback.markClipboardConcealed
+    }
+
+    init(
+        excludedBundleIDs: [String], settleMilliseconds: Int, maxCharacters: Int,
+        enableCopyFallback: Bool, dragThreshold: Double, maxAncestorWalk: Int,
+        markClipboardConcealed: Bool
+    ) {
+        self.excludedBundleIDs = excludedBundleIDs
+        self.settleMilliseconds = settleMilliseconds
+        self.maxCharacters = maxCharacters
+        self.enableCopyFallback = enableCopyFallback
+        self.dragThreshold = dragThreshold
+        self.maxAncestorWalk = maxAncestorWalk
+        self.markClipboardConcealed = markClipboardConcealed
+    }
 
     static var fileURL: URL {
         FileManager.default

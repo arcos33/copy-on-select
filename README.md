@@ -3,8 +3,8 @@
 Select text anywhere on macOS and it is on your clipboard. That is the whole app.
 
 You build it yourself from source you can read. It contains no networking code,
-spawns no processes, and writes nothing to disk except when you ask it to create
-its own config file.
+execs no subprocesses (no `Process`, no `posix_spawn`, no `NSAppleScript`), and
+writes nothing to disk except the config file you ask it to create.
 
 ---
 
@@ -75,11 +75,14 @@ Since the whole pitch is trustworthiness, here is where it stops:
 2. **The clipboard itself is not private.** This app writes to
    `NSPasteboard.general`, which Handoff / Universal Clipboard may sync to your
    other Apple devices, and which every clipboard manager reads. Writing
-   selections constantly *increases* what crosses that boundary. Items are
-   marked `org.nspasteboard.ConcealedType`, which well-behaved clipboard
-   managers and sync tools honour, but that is a convention, not a guarantee.
+   selections constantly *increases* what crosses that boundary.
+   `markClipboardConcealed: true` marks writes `org.nspasteboard.ConcealedType`,
+   which well-behaved clipboard managers and sync tools honour — but that is a
+   convention, not a guarantee, and it is off by default so that clipboard
+   history keeps working.
    **The accurate claim is: this tool adds no new exfiltration path of its own.**
-   If your selections must never leave the machine, turn off Universal Clipboard.
+   If your selections must never leave the machine, turn that key on and turn
+   off Universal Clipboard.
 
 3. **It still needs unscoped Accessibility.** No implementation can avoid that.
 
@@ -162,6 +165,11 @@ default one).
 | `maxCharacters` | `1000000` | ignore larger selections (`⌘A` in a big file) |
 | `enableCopyFallback` | `true` | allow the gated `⌘C` fallback |
 | `dragThreshold` | `4.0` | points of movement that count as a drag |
+| `maxAncestorWalk` | `6` | how far up the AX tree to look for the selection |
+| `markClipboardConcealed` | `false` | hide writes from clipboard managers and sync |
+
+Unknown or missing keys fall back to defaults, so a config written against an
+older version keeps working.
 
 ---
 

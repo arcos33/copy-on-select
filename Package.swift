@@ -19,6 +19,9 @@ let package = Package(
                 // SwiftPM has no .app product type. Embedding the Info.plist
                 // directly in the __TEXT segment gives the executable a bundle
                 // identifier and LSUIElement without assembling a bundle.
+                //
+                // Note: .unsafeFlags means this package cannot be consumed as a
+                // SwiftPM dependency. That is fine for a leaf executable.
                 .unsafeFlags([
                     "-Xlinker", "-sectcreate",
                     "-Xlinker", "__TEXT",

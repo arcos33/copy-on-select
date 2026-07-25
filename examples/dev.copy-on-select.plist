@@ -16,8 +16,15 @@
 
     <key>RunAtLoad</key>
     <true/>
+
+    <!-- Restart on a crash, but NOT after a clean exit. Plain KeepAlive=true
+         would relaunch within seconds and make the menu bar's Quit item a
+         no-op. -->
     <key>KeepAlive</key>
-    <true/>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
     <key>ProcessType</key>
     <string>Interactive</string>
 </dict>

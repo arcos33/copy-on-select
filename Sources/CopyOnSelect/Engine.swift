@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Carbon.HIToolbox
 import CoreGraphics
 import Foundation
 
@@ -9,27 +10,31 @@ import Foundation
 ///
 ///   1. Classify the gesture (drag / multi-click / shift-click).
 ///   2. Settle, so the target app has finished updating its AX state.
-///   3. Resolve the target app from the EVENT's pid, not the frontmost app.
-///   4. Ask accessibility what is selected, starting from the element that was
-///      actually clicked.
-///   5. Only synthesize Cmd+C when we know we are in a text element whose
-///      selection could not be read.
+///   3. Hit-test the element that was actually clicked, and take the owning
+///      process FROM THAT ELEMENT — not from the event, and not from whatever
+///      happens to be frontmost after the settle delay.
+///   4. Check exclusions against that process, then ask accessibility what is
+///      selected, walking up from the clicked element.
+///   5. Only synthesize Cmd+C when we are in a narrow set of genuine text roles
+///      whose selection could not be read.
 ///
-/// Step 4 is what separates this from "fire Cmd+C on every drag": we ask rather
-/// than guess, so a Finder file drag or a canvas drag produces nothing instead
-/// of clobbering the clipboard.
+/// Step 3 is what makes the result attributable to this gesture, and step 5 is
+/// what stops the tool from clobbering the clipboard when it cannot tell what
+/// happened.
 final class Engine {
     private let queue = DispatchQueue(label: "dev.copy-on-select.engine", qos: .userInitiated)
-    private var config: Config
+    /// The fallback blocks (waiting on modifiers, polling the pasteboard), so it
+    /// gets its own queue and cannot stall subsequent selections.
+    private let fallbackQueue = DispatchQueue(label: "dev.copy-on-select.fallback", qos: .utility)
+
+    private let config: Config
     private var tap: EventTap?
     private var pending: DispatchWorkItem?
 
-    // Gesture state, only touched from the event-tap callback (main run loop).
+    /// Gesture state. Only touched from the event-tap callback, which runs on
+    /// the main run loop, so no synchronisation is needed.
     private var downLocation: CGPoint = .zero
-    private var downPID: pid_t = 0
-
-    // Freshness state, only touched on `queue`.
-    private var lastSelectionKey: String?
+    private var hasDown = false
 
     private(set) var isEnabled = true
 
@@ -42,6 +47,7 @@ final class Engine {
     /// Starts the tap. Returns false when accessibility trust is missing.
     @discardableResult
     func start() -> Bool {
+        guard tap == nil else { return true }
         let tap = EventTap { [weak self] type, event in
             self?.handle(type: type, event: event)
         }
@@ -50,36 +56,44 @@ final class Engine {
         return true
     }
 
+    /// Pausing disables the tap itself rather than just ignoring events, so a
+    /// paused app genuinely observes nothing.
     func setEnabled(_ enabled: Bool) {
         isEnabled = enabled
+        tap?.setEnabled(enabled)
     }
 
     var isTapActive: Bool { tap?.isActive ?? false }
 
     /// Accessibility can be revoked while we run. Surfacing that is better than
     /// appearing alive but doing nothing.
-    var isHealthy: Bool { AX.isTrusted && isTapActive }
+    var isHealthy: Bool { AX.isTrusted && (isEnabled ? isTapActive : tap != nil) }
 
-    // MARK: - Event handling (runs on the main run loop; must stay trivial)
+    // MARK: - Event handling (main run loop; must stay trivial)
 
     private func handle(type: CGEventType, event: CGEvent) {
         switch type {
         case .leftMouseDown:
             downLocation = event.location
-            downPID = pid_t(event.getIntegerValueField(.eventTargetUnixProcessID))
+            hasDown = true
 
         case .leftMouseUp:
             guard isEnabled else { return }
-            let up = event.location
+            // Without a matching mouse-down (first event after launch, or after
+            // the tap was re-enabled mid-drag) the down point is stale and the
+            // hit test would target an unrelated element.
+            guard hasDown else { return }
+            hasDown = false
+
             let clickCount = event.getIntegerValueField(.mouseEventClickState)
             let shiftHeld = event.flags.contains(.maskShift)
-            let pid = pid_t(event.getIntegerValueField(.eventTargetUnixProcessID))
 
             guard isSelectionCandidate(
-                down: downLocation, up: up, clickCount: clickCount, shiftHeld: shiftHeld)
+                down: downLocation, up: event.location,
+                clickCount: clickCount, shiftHeld: shiftHeld)
             else { return }
 
-            schedule(at: downLocation, pid: pid == 0 ? downPID : pid)
+            schedule(at: downLocation)
 
         default:
             break
@@ -100,62 +114,58 @@ final class Engine {
         return dragged || clickCount >= 2 || shiftHeld
     }
 
-    private func schedule(at point: CGPoint, pid: pid_t) {
+    private func schedule(at point: CGPoint) {
         pending?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            self?.resolveSelection(at: point, pid: pid)
+            self?.resolveSelection(at: point)
         }
         pending = work
         queue.asyncAfter(
             deadline: .now() + .milliseconds(config.settleMilliseconds), execute: work)
     }
 
-    // MARK: - Selection resolution (runs on `queue`, never on the tap callback)
+    // MARK: - Selection resolution (on `queue`, never on the tap callback)
 
-    private func resolveSelection(at point: CGPoint, pid: pid_t) {
-        guard !isExcluded(pid: pid) else { return }
-
-        // Rung 1: the element that was actually clicked. Starting here (rather
-        // than from the focused element) is what makes the result attributable
+    private func resolveSelection(at point: CGPoint) {
+        // Rung 1: the element that was actually clicked. Starting here — rather
+        // than from the focused element — is what makes the result attributable
         // to this gesture instead of to whatever is selected elsewhere.
         guard let clicked = AX.element(at: point) else {
-            // No AX element at all under the cursor. We cannot tell whether a
-            // selection happened, so we do nothing. Guessing here is exactly
-            // what produces wrong-clipboard bugs.
+            // Nothing under the cursor exposes accessibility, so we cannot tell
+            // whether a selection happened. Guessing here is what produces
+            // wrong-clipboard bugs.
             return
         }
 
-        // Never read a password field. Secure Input Mode does not cover this
-        // path, so this check is the actual protection.
-        if AX.isSecure(clicked) { return }
+        // The owning process of the element we are about to read. Taken from
+        // the element rather than the event because the event's target-pid is
+        // not reliably populated at a session tap, and because the window under
+        // the cursor may have changed during the settle delay.
+        guard let pid = AX.pid(of: clicked), !isExcluded(pid: pid) else { return }
 
-        guard AX.isTextRole(clicked) else {
-            // Finder rows, canvases, title bars, sliders, scrollbars. Dropping
-            // here is what prevents the file-copy and stale-copy hazards.
-            return
-        }
-
-        let range = AX.selectedRange(clicked)
-
-        if let text = AX.selectedText(clicked), !text.isEmpty {
-            commit(text, pid: pid, range: range)
-            return
-        }
-
-        // Rung 2: some apps expose the range plus the parameterized
-        // string-for-range attribute without exposing kAXSelectedText.
-        if let range, range.length > 0,
-            let text = AX.string(clicked, forRange: range), !text.isEmpty
+        switch AX.findSelection(
+            from: clicked, maxDepth: config.maxAncestorWalk, maxCharacters: config.maxCharacters)
         {
-            commit(text, pid: pid, range: range)
+        case .text(let text):
+            commit(text)
             return
+        case .secure:
+            // A password field was on the path. Copy nothing, and do not fall
+            // back to synthesizing a keystroke.
+            return
+        case .none:
+            break
         }
 
-        // Rung 3 (gated fallback): we know this is a non-secure text element
-        // whose selection is unreadable. Only now is synthesizing Cmd+C
-        // justified.
-        guard config.enableCopyFallback else { return }
-        copyFallback(pid: pid)
+        // Gated fallback: only for a narrow set of genuine text roles whose
+        // selection could not be read. Anything else — labels, rows, canvases,
+        // Finder items, title bars — drops here.
+        guard config.enableCopyFallback, AX.isFallbackRole(clicked) else { return }
+        guard isSafeToSynthesizeCopy(targetPID: pid) else { return }
+
+        fallbackQueue.async { [weak self] in
+            self?.copyFallback()
+        }
     }
 
     private func isExcluded(pid: pid_t) -> Bool {
@@ -166,65 +176,82 @@ final class Engine {
         return config.excludedBundleIDs.contains(bundleID)
     }
 
-    /// Rejects selections we have already copied, so an unchanged selection is
-    /// not rewritten and clipboard history stays clean.
-    private func isFresh(pid: pid_t, range: CFRange?, text: String) -> Bool {
-        let key: String
-        if let range {
-            key = "\(pid):\(range.location):\(range.length):\(text.count)"
-        } else {
-            key = "\(pid):-:-:\(text.hashValue)"
-        }
-        guard key != lastSelectionKey else { return false }
-        lastSelectionKey = key
+    /// The password check above applies to the element we hit-tested, but a
+    /// synthetic ⌘C goes to whatever holds *keyboard focus*, which need not be
+    /// the same thing. These three checks close that gap.
+    private func isSafeToSynthesizeCopy(targetPID: pid_t) -> Bool {
+        // 1. macOS is in secure input mode (a password field is focused
+        //    somewhere). Never synthesize keystrokes in that state.
+        if IsSecureEventInputEnabled() { return false }
+
+        // 2. The focused element is itself a password field.
+        if let focused = AX.focusedElement(), AX.isSecure(focused) { return false }
+
+        // 3. The keystroke would be delivered to the app we actually read from.
+        guard let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier,
+            frontmost == targetPID
+        else { return false }
+
         return true
     }
 
-    private func commit(_ text: String, pid: pid_t, range: CFRange?) {
-        guard text.count <= config.maxCharacters else { return }
-        guard isFresh(pid: pid, range: range, text: text) else { return }
+    private func commit(_ text: String) {
+        // No separate "freshness" bookkeeping: Clipboard.write already skips a
+        // write whose content equals the current clipboard, which is the same
+        // check without the false negatives a cached key would introduce.
+        let concealed = config.markClipboardConcealed
         DispatchQueue.main.async {
-            Clipboard.write(text, concealed: true)
+            Clipboard.write(text, concealed: concealed)
         }
     }
 
     // MARK: - Cmd+C fallback
 
-    /// Synthesizes Cmd+C, then restores the previous clipboard if it did not
-    /// produce usable text.
+    /// Synthesizes ⌘C, then restores the previous clipboard only if the copy
+    /// actually damaged it.
     ///
-    /// The save/restore is mandatory: on this path the pasteboard is overwritten
-    /// before we can inspect the result, so "skip if unchanged" cannot work the
-    /// way it does on the accessibility path.
-    private func copyFallback(pid: pid_t) {
+    /// All pasteboard access here happens on this one queue, so reads and
+    /// writes are not split across threads.
+    private func copyFallback() {
         let snapshot = Clipboard.snapshot()
 
         // Extending a selection means Shift is often physically held. Posting
-        // Cmd+C now could be received as Cmd+Shift+C, a different shortcut, so
-        // wait briefly for modifiers to clear. Read the state rather than
-        // tapping keyboard events.
-        waitForModifiersToClear(timeout: 0.6)
+        // ⌘C then risks the app receiving ⇧⌘C, a different shortcut. Read the
+        // modifier state rather than tapping keyboard events.
+        waitForModifiersToClear(timeout: 0.15)
 
         postCommandC()
 
-        // Give the target app a moment to service the keystroke.
-        let deadline = Date().addingTimeInterval(0.3)
+        // Wait for the pasteboard to change AND to carry usable text. Breaking
+        // as soon as changeCount moves is a race: an app bumps the count in
+        // clearContents() and sets the string flavor afterwards, so an
+        // immediate read can see nothing and wrongly conclude the copy failed.
+        let deadline = Date().addingTimeInterval(0.4)
+        var changed = false
+        var produced: String?
+
         while Date() < deadline {
-            if NSPasteboard.general.changeCount != snapshot.changeCount { break }
+            if NSPasteboard.general.changeCount != snapshot.changeCount {
+                changed = true
+                let candidate = NSPasteboard.general.string(forType: .string)
+                if let candidate,
+                    !candidate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                {
+                    produced = candidate
+                    break
+                }
+            }
             Thread.sleep(forTimeInterval: 0.02)
         }
 
-        let produced = NSPasteboard.general.string(forType: .string)
-        let usable = (produced?.isEmpty == false)
-            && produced!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        // Nothing happened: the clipboard is already untouched. Restoring here
+        // would be destructive, not neutral — it bumps changeCount, flattens
+        // promised flavors, adds a duplicate clipboard-manager entry, and can
+        // orphan a password manager's pending auto-clear.
+        guard changed else { return }
 
-        if NSPasteboard.general.changeCount == snapshot.changeCount || !usable {
-            DispatchQueue.main.async { Clipboard.restore(snapshot) }
-            return
-        }
-
-        if let produced {
-            _ = isFresh(pid: pid, range: nil, text: produced)
+        if produced == nil {
+            Clipboard.restore(snapshot)
         }
     }
 
@@ -239,7 +266,7 @@ final class Engine {
     }
 
     private func postCommandC() {
-        let virtualKeyC: CGKeyCode = 0x08
+        let virtualKeyC = CGKeyCode(kVK_ANSI_C)
         let source = CGEventSource(stateID: .combinedSessionState)
         guard
             let down = CGEvent(keyboardEventSource: source, virtualKey: virtualKeyC, keyDown: true),

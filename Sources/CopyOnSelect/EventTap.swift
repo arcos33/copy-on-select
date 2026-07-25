@@ -65,6 +65,12 @@ final class EventTap {
         return true
     }
 
+    /// Pausing genuinely stops observation rather than filtering afterwards.
+    func setEnabled(_ enabled: Bool) {
+        guard let port else { return }
+        CGEvent.tapEnable(tap: port, enable: enabled)
+    }
+
     func stop() {
         if let port {
             CGEvent.tapEnable(tap: port, enable: false)
@@ -74,6 +80,13 @@ final class EventTap {
         }
         port = nil
         source = nil
+    }
+
+    /// The run loop holds the source, which holds a mach port carrying an
+    /// UNRETAINED pointer to self. Tearing the source down here keeps that
+    /// pointer from outliving the object.
+    deinit {
+        stop()
     }
 
     private func reenable() {
