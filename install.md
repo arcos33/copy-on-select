@@ -67,18 +67,42 @@ First check whether the certificate already exists:
 security find-certificate -c copy-on-select-local >/dev/null 2>&1 && echo "exists" || echo "missing"
 ```
 
-If it prints `missing`, **stop** and give your user these instructions verbatim:
+If it prints `missing`, **stop** and walk your user through the wizard below.
+Do not just say "create a code-signing certificate" — it is an eight-screen
+assistant with defaults that are wrong for this purpose, and one screen leaks
+their email address into the certificate. Give them the screens one at a time,
+in order, and tell them exactly what to enter.
 
-> Open **Keychain Access** → menu **Keychain Access → Certificate Assistant →
-> Create a Certificate…**
-> - Name: `copy-on-select-local`
-> - Identity Type: **Self Signed Root**
-> - Certificate Type: **Code Signing**
-> - Tick **Let me override defaults**, then accept the remaining defaults.
+> Open **Keychain Access** (⌘-Space → "Keychain Access"), then menu
+> **Keychain Access → Certificate Assistant → Create a Certificate…**
+>
+> The assistant has several screens. Here is every one, in order:
+>
+> | # | Screen | What to do |
+> |---|---|---|
+> | 1 | **Create a Certificate** | Name: `copy-on-select-local` · Identity Type: **Self Signed Root** · Certificate Type: **Code Signing** · **tick "Let me override defaults"** (without this you cannot change the expiry) |
+> | 2 | **Certificate Information** (serial / validity) | Validity Period: change **365** to something long, e.g. `7300` (20 years). When it silently expires, signing breaks and the cause is very hard to trace later. |
+> | 3 | **Certificate Information** (personal info) | ⚠️ **The Email Address field is pre-filled with your real email — clear it.** Whatever is here is embedded in the certificate and appears in the binary's signature. Common Name should already be `copy-on-select-local`. Leave Organization, Unit, City, State blank. Country can stay as-is. |
+> | 4 | **Key Pair Information** | Defaults: **2048 bits**, **RSA**. |
+> | 5 | **Key Usage Extension** | Leave "Include" ticked. Ensure **Signature** is the only capability checked. |
+> | 6 | **Extended Key Usage Extension** | Leave "Include" ticked. Ensure **Code Signing** is the only capability checked. |
+> | 7 | **Basic Constraints Extension** | Leave **unchecked** — this certificate is not a CA. |
+> | 8 | **Subject Alternate Name Extension** | **Uncheck** it. If you leave it on, make sure `rfc822Name` is empty (same email concern as screen 3). |
+> | 9 | **Specify a Location** | Keychain: **login**. Click **Create**. |
+>
+> The final screen shows *"This certificate has not been verified by a third
+> party."* **That is expected and fine** — self-signed means no certificate
+> authority vouches for it. Nobody else is being asked to trust it; its only
+> job is to give the binary a stable identity so macOS keeps the Accessibility
+> grant across rebuilds.
 >
 > Tell me when it is created.
 
-Wait for confirmation. Then sign:
+Wait for confirmation. Then sign — **a keychain dialog may appear asking whether
+`codesign` may use the key. "Always Allow" stops it reappearing on every
+rebuild; plain "Allow" also works, it just prompts again next time.** Either is
+fine, and it can be changed later in Keychain Access (Keys → `copy-on-select-local`
+→ ⌘I → Access Control).
 
 ```sh
 codesign --force --sign copy-on-select-local \
