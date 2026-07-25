@@ -31,16 +31,38 @@ final class MenuBar: NSObject, NSMenuDelegate {
         }
     }
 
+    /// Menu bar icon point size. The system default is around 14; this is
+    /// deliberately larger.
+    private static let iconPointSize: CGFloat = 17
+
     private func updateButton() {
         guard let button = statusItem?.button else { return }
+
+        let name: String
         if !engine.isHealthy {
-            button.title = "⚠"
+            name = "exclamationmark.triangle"
         } else if engine.isEnabled {
-            button.title = "⧉"
+            name = "doc.on.doc"
         } else {
-            // A combining slash renders unreliably in the menu bar; use a
-            // distinct glyph instead.
-            button.title = "◌"
+            name = "pause.circle"
+        }
+
+        // SF Symbols rather than a text glyph. A glyph set as `title` aligns on
+        // its baseline, which is why the old icon sat visibly too high; an
+        // image is centred in the status item automatically. Template mode lets
+        // it follow light/dark menu bars.
+        let config = NSImage.SymbolConfiguration(
+            pointSize: Self.iconPointSize, weight: .regular)
+        if let image = NSImage(systemSymbolName: name, accessibilityDescription: "copy-on-select")?
+            .withSymbolConfiguration(config)
+        {
+            image.isTemplate = true
+            button.image = image
+            button.title = ""
+        } else {
+            // Older systems without the symbol: fall back to the glyph.
+            button.image = nil
+            button.title = engine.isHealthy ? (engine.isEnabled ? "⧉" : "◌") : "⚠"
         }
     }
 

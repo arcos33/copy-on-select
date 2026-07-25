@@ -63,10 +63,12 @@ struct Config: Codable {
         maxCharacters: 1_000_000,
         enableCopyFallback: true,
         dragThreshold: 4.0,
-        // Measured: a hit test over text on a live Safari page lands 8 parent
-        // hops below the AXWebArea that owns the selection, so a shallow walk
-        // silently produces nothing in browsers.
-        maxAncestorWalk: 16,
+        // Measured 2026-07-25 across Safari, Chrome and Linear: every real
+        // selection was answered at depth 0 by the element under the cursor.
+        // A deep walk was neither necessary nor sufficient — the earlier
+        // failures were a role-gating bug, not insufficient depth. A few levels
+        // are kept for apps that answer on a container instead.
+        maxAncestorWalk: 5,
         markClipboardConcealed: false
     )
 

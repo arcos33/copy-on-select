@@ -9,13 +9,40 @@ enum AX {
     /// One hung app must not wedge the worker queue.
     static let messagingTimeout: Float = 0.25
 
-    /// Roles the *clicked* element may have for us to consider the gesture a
-    /// text selection at all.
+    /// Roles that are unambiguously interactive controls rather than content.
+    /// A click here is a click on a widget, so we never read a selection —
+    /// neither from the element nor from its ancestors.
     ///
-    /// This gate matters: without it, a double-click on a button or image whose
-    /// ancestor happens to answer `AXSelectedText` would return that ancestor's
-    /// unrelated, pre-existing selection and copy it — reintroducing exactly the
-    /// stale-clipboard bug the hit test was supposed to prevent.
+    /// Measured 2026-07-25: this is a *denylist* rather than an allowlist
+    /// because real selections are frequently answered by `AXGroup`, `AXList`,
+    /// `AXCell` and similar container roles at depth 0 — in Safari, Chrome and
+    /// Linear alike. An allowlist of "text" roles silently dropped those, which
+    /// made the app look like it randomly stopped working depending on which
+    /// element the drag happened to start on.
+    static let interactiveLeafRoles: Set<String> = [
+        "AXButton",
+        "AXPopUpButton",
+        "AXMenuButton",
+        "AXCheckBox",
+        "AXRadioButton",
+        "AXSlider",
+        "AXIncrementor",
+        "AXStepper",
+        "AXDisclosureTriangle",
+        "AXMenuItem",
+        "AXMenuBarItem",
+        "AXImage",
+        "AXColorWell",
+    ]
+
+    /// Roles the clicked element must have before we are willing to look at its
+    /// *ancestors* for a selection.
+    ///
+    /// Reading from an ancestor is the risky case: a click on a non-text
+    /// descendant could otherwise pick up a container's unrelated, pre-existing
+    /// selection. Depth 0 has no such ambiguity — if the element under the
+    /// cursor answers, that selection is the one you clicked on — so this gate
+    /// applies only from depth 1 upwards.
     static let leafTextRoles: Set<String> = [
         kAXTextAreaRole as String,
         kAXTextFieldRole as String,
@@ -267,10 +294,12 @@ enum AX {
 
         if isSecure(role: leafRole, subrole: leafSubrole) { return .secure }
 
-        // The click must have landed on something text-bearing. Otherwise we do
-        // not walk at all: an ancestor's selection would not belong to this
-        // gesture.
-        guard let leafRole, leafTextRoles.contains(leafRole) else { return .none }
+        // A click on a control is not a text selection, at any depth.
+        if let leafRole, interactiveLeafRoles.contains(leafRole) { return .none }
+
+        // Ancestors are only consulted when the click landed on something
+        // text-bearing; see leafTextRoles.
+        let mayConsultAncestors = leafRole.map { leafTextRoles.contains($0) } ?? false
 
         var current: AXUIElement? = element
         var depth = 0
@@ -283,7 +312,14 @@ enum AX {
             // stop entirely rather than continue up to a readable ancestor.
             if isSecure(role: nodeRole, subrole: nodeSubrole) { return .secure }
 
-            if let nodeRole, readableRoles.contains(nodeRole) {
+            // Depth 0 is always worth asking — container roles routinely answer.
+            // Above that, restrict to roles that plausibly own a selection.
+            let worthAsking =
+                depth == 0
+                ? true
+                : (mayConsultAncestors && (nodeRole.map { readableRoles.contains($0) } ?? false))
+
+            if worthAsking {
                 if let text = selectedText(node), !text.isEmpty {
                     return text.count <= maxCharacters ? .text(text) : .tooLarge
                 }
