@@ -92,13 +92,16 @@ launchd start with its own permission, non-string clipboard preserved.
 Cursor is the most hostile app we support — Electron webviews, a canvas editor,
 an embedded TUI, multi-pane focus. Settled state:
 
-- **Markdown source editor (Monaco): NOT supported, by user decision.** Monaco
-  renders text as a canvas; with `editor.accessibilitySupport: "off"` the
-  element under the cursor is literally an `AXImage` and no selection is
-  exposed at any depth (measured twice). Flipping the setting to `"on"` would
-  likely fix it, but Eugene has had problems with that mode before and chose to
-  keep it off. Manual ⌘C works there (Monaco-internal). Do not ask again;
-  revisit only if he raises it.
+- **Markdown source editor (Monaco): NOT supported — final decision 2026-07-25,
+  don't re-litigate.** Copying there works only with Cursor's
+  `editor.accessibilitySupport: "on"` (confirmed empirically; applies live, no
+  reload). But that mode puts Monaco into screen-reader optimization, which
+  **disables word wrap** among other effects, and Eugene weighed the trade and
+  chose word wrap. With the setting off, the element under the cursor is an
+  `AXImage` and no selection is exposed at any depth (measured twice), so no
+  accessibility route exists. Manual ⌘C works there (Monaco-internal). Note:
+  Cursor overwrites external edits to its settings.json while running — any
+  future change must be made in Cursor's own settings UI.
 - **Preview pane: accessibility text only** (Cursor is in
   `nativeCopyDisabledApps`). Correct plain text, no styles. The synthetic ⌘C
   lands in whatever pane holds *keyboard* focus, which a mouse selection in
