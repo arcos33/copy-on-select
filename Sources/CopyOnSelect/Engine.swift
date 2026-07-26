@@ -120,16 +120,33 @@ final class Engine {
     private func schedule(at point: CGPoint) {
         pending?.cancel()
         let gen = nextGeneration()
-        // Recorded before the settle delay so we can tell whether anything else
-        // copied while we were resolving this gesture.
-        let baseline = Clipboard.changeCount
+
+        // The clipboard baseline is captured on the worker queue, NOT here.
+        //
+        // This runs inside the event-tap callback, and reading
+        // NSPasteboard.changeCount is cross-process IPC that can block. A slow
+        // tap callback makes the kernel disable the tap, which stops every
+        // subsequent gesture from being seen at all — the app keeps running and
+        // silently never copies again. Nothing in this callback may do IPC.
+        //
+        // The queue is serial and this is dispatched immediately, so the
+        // baseline is still taken at gesture time rather than after the settle.
+        queue.async { [weak self] in
+            self?.clipboardBaseline = Clipboard.changeCount
+        }
+
         let work = DispatchWorkItem { [weak self] in
-            self?.resolveSelection(at: point, generation: gen, clipboardBaseline: baseline)
+            guard let self else { return }
+            self.resolveSelection(
+                at: point, generation: gen, clipboardBaseline: self.clipboardBaseline)
         }
         pending = work
         queue.asyncAfter(
             deadline: .now() + .milliseconds(config.settleMilliseconds), execute: work)
     }
+
+    /// Only touched on `queue`.
+    private var clipboardBaseline = 0
 
     // MARK: - Selection resolution (on `queue`, never on the tap callback)
 
