@@ -139,6 +139,16 @@ window; last-resort path restores again). Still open, ranked:
       a rare false pass). Live with it; revisit with AXObserver.
 - [ ] `(` is kept while `)` is stripped in the normalization marker set.
 
+## Apps measured as unsupported (manual ⌘C only — structural, not bugs)
+
+- **Messages (com.apple.MobileSMS)** — measured 2026-07-25, 23 probe samples:
+  the SwiftUI transcript exposes only anonymous `AXGroup` containers, no text
+  roles, and answers no selection attribute by any mechanism. Nothing to read,
+  and the no-AX-confirmation rule (correctly) blocks the synthetic ⌘C — which
+  would otherwise copy a whole bubble when three words were selected. Also
+  arguably an app privacy-minded users would exclude anyway.
+- **Cursor Markdown source editor** — see the Cursor section above.
+
 ## Known limitations carried over from review
 
 Consciously accepted for now; revisit if they bite.
