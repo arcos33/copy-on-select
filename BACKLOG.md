@@ -87,6 +87,26 @@ launchd start with its own permission, non-string clipboard preserved.
 
 ---
 
+## Cursor: settled per-pane behaviour (decided 2026-07-25, don't re-litigate)
+
+Cursor is the most hostile app we support — Electron webviews, a canvas editor,
+an embedded TUI, multi-pane focus. Settled state:
+
+- **Markdown source editor (Monaco): NOT supported, by user decision.** Monaco
+  renders text as a canvas; with `editor.accessibilitySupport: "off"` the
+  element under the cursor is literally an `AXImage` and no selection is
+  exposed at any depth (measured twice). Flipping the setting to `"on"` would
+  likely fix it, but Eugene has had problems with that mode before and chose to
+  keep it off. Manual ⌘C works there (Monaco-internal). Do not ask again;
+  revisit only if he raises it.
+- **Preview pane: accessibility text only** (Cursor is in
+  `nativeCopyDisabledApps`). Correct plain text, no styles. The synthetic ⌘C
+  lands in whatever pane holds *keyboard* focus, which a mouse selection in
+  Preview does not reliably move, so the native path produced wrong-pane
+  content that the correspondence check rightly rejected.
+- **Claude Code TUI pane: handles its own copying** (OSC 52); the yield check
+  defers to it.
+
 ## Known limitations carried over from review
 
 Consciously accepted for now; revisit if they bite.
