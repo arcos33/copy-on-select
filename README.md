@@ -124,14 +124,43 @@ This app **asks instead of guessing**:
    selected elsewhere.
 4. If that element is a password field, stop. If it is not a text element at
    all — a Finder row, a canvas, a title bar, a scrollbar — **do nothing**.
-5. Read the selection. Only if the element *is* text and its selection cannot be
-   read do we fall back to synthesizing `⌘C`, and that path snapshots the
-   clipboard first and restores it if the copy produced nothing usable.
+5. Read the selection. If something else copied while we were resolving — a
+   terminal with its own copy-on-select, say — leave its result alone.
 
 The result: less coverage than a blind tool in apps with poor accessibility
-support, in exchange for never putting the wrong thing on your clipboard. For an
-app whose entire reason for existing is a wrong-clipboard bug, that is the right
-trade.
+support, in exchange for a much smaller chance of putting the wrong thing on
+your clipboard. For an app whose entire reason for existing is a wrong-clipboard
+bug, that is the right trade.
+
+### It also synthesizes ⌘C in a few apps — read this
+
+Accessibility returns text, not structure. Measured across apps: Chrome and
+Linear return zero line breaks for a bulleted list, and Notes returns no bullet
+characters at all, because list markers are formatting rather than text. Safari
+is fine — it preserves both.
+
+So for a short list of apps (`preferNativeCopyApps`, default Chrome, Linear and
+Notes) the app **synthesizes a ⌘C keystroke** after accessibility has confirmed
+a selection, and uses the app's own copy, which serialises lists properly.
+
+This is worth knowing because it is a real capability, and because it has a real
+downside:
+
+- **The app controls the result.** A web page can register a copy handler that
+  rewrites what lands on the clipboard. The accessibility read cannot be
+  influenced that way.
+- Mitigated by a **correspondence check**: the app's text is used only when it
+  matches what accessibility reported, once list markers and whitespace are
+  stripped. Anything else falls back to the accessibility text.
+- It is an **allowlist, not a default**, precisely so this runs only where it
+  measurably helps. `preferNativeCopyEverywhere` turns it on globally if you
+  want structure everywhere and accept the trade.
+- If the copy is blocked — secure input mode, an app that rebinds ⌘C — the
+  accessibility text is used, so it degrades rather than fails.
+
+The synthetic keystroke is never sent when accessibility reports a password
+field, when macOS secure input mode is active, or when the frontmost app is not
+the one the selection came from.
 
 ### Why there is an exclusion list
 
@@ -175,13 +204,20 @@ default one).
 
 | Key | Default | Meaning |
 |---|---|---|
-| `excludedBundleIDs` | see `Config.swift` | apps to ignore entirely |
+| `excludedBundleIDs` | Finder + several terminals | apps to ignore entirely |
 | `settleMilliseconds` | `180` | delay before reading the selection |
 | `maxCharacters` | `1000000` | ignore larger selections (`⌘A` in a big file) |
-| `enableCopyFallback` | `true` | allow the gated `⌘C` fallback |
+| `preferNativeCopyApps` | Chrome, Linear, Notes | apps where the app's own ⌘C is used, for list structure |
+| `preferNativeCopyEverywhere` | `false` | use the app's own copy in every app |
+| `yieldToExistingCopy` | `true` | don't overwrite a copy something else already made |
+| `plainTextOnly` | `false` | drop styling from a native copy; structure survives either way |
+| `enableCopyFallback` | `false` | last resort: ⌘C when accessibility finds *no* selection |
 | `dragThreshold` | `4.0` | points of movement that count as a drag |
-| `maxAncestorWalk` | `6` | how far up the AX tree to look for the selection |
+| `maxAncestorWalk` | `5` | how far up the AX tree to look for the selection |
 | `markClipboardConcealed` | `false` | hide writes from clipboard managers and sync |
+
+`copy-on-select --apps` prints every running app with its bundle identifier, for
+filling in the list keys.
 
 Unknown or missing keys fall back to defaults, so a config written against an
 older version keeps working.

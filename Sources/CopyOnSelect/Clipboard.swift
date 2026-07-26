@@ -12,6 +12,12 @@ enum Clipboard {
         NSPasteboard.general.string(forType: .string)
     }
 
+    /// Increments on every write by any process. Used to detect that something
+    /// else copied while a gesture was being resolved.
+    static var changeCount: Int {
+        NSPasteboard.general.changeCount
+    }
+
     /// Writes plain text. Returns false when the write was skipped.
     ///
     /// `force` rewrites even when the string already matches. That is needed

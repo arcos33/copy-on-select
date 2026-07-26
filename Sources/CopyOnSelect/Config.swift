@@ -18,28 +18,52 @@ struct Config: Codable {
     /// return megabytes and take seconds to marshal across the AX boundary.
     var maxCharacters: Int
 
-    /// Once accessibility has confirmed a safe, non-empty selection, ask the
-    /// app to copy it itself rather than using the text accessibility returned.
+    /// Apps where, once accessibility has confirmed a safe selection, the app
+    /// is asked to copy it itself instead of using the text accessibility
+    /// returned.
     ///
-    /// The app's own copy is higher fidelity: it preserves bullet markers,
-    /// numbering and line breaks, which accessibility flattens or drops
-    /// entirely. Measured 2026-07-25: Chrome and Linear return zero newlines,
-    /// and Notes returns no bullet characters at all, because list markers are
-    /// formatting rather than text.
+    /// An **allowlist**, not a global default, because asking the app to copy
+    /// means synthesizing a keystroke, and that hands control of the result to
+    /// the app: a web page can register a copy handler that rewrites what lands
+    /// on the clipboard. The accessibility read cannot be influenced that way.
+    /// So the higher-fidelity route is used only where it measurably helps.
     ///
-    /// Accessibility still decides *whether* to copy and whether it is safe;
-    /// this only changes where the text comes from. If the copy produces
-    /// nothing — secure input mode, an app that rebinds Cmd+C — the
-    /// accessibility text is used instead, so this degrades rather than fails.
-    var preferNativeCopy: Bool
+    /// Measured 2026-07-25: Chrome and Linear return zero newlines and Notes
+    /// returns no bullet characters, because list markers are formatting rather
+    /// than text. Safari needs nothing here — its marker path already preserves
+    /// line breaks.
+    var preferNativeCopyApps: [String]
 
-    /// Apps to exclude from `preferNativeCopy`, forcing the accessibility text.
-    /// An escape hatch for anywhere the synthetic copy misbehaves.
-    var nativeCopyDisabledApps: [String]
+    /// Use the app's own copy everywhere rather than only in
+    /// `preferNativeCopyApps`. For testing, or for anyone who would rather have
+    /// list structure everywhere and accepts the trade above.
+    var preferNativeCopyEverywhere: Bool
 
-    /// Write only plain text, discarding the styling flavors an app's own copy
-    /// puts on the pasteboard. List structure survives — bullets and newlines
-    /// are characters in the plain-text flavor — while fonts and colors do not.
+    /// If something else wrote to the clipboard while this gesture was being
+    /// resolved, leave it alone.
+    ///
+    /// Terminals with their own copy-on-select — Claude Code's TUI via OSC 52,
+    /// iTerm2, VS Code's `terminal.integrated.copyOnSelection` — copy the same
+    /// selection a moment before we would. Deferring keeps their result, which
+    /// is authoritative for their own content, instead of overwriting it with a
+    /// possibly different accessibility reading.
+    ///
+    /// General rather than app-specific: no list to maintain, and it fails in
+    /// the safe direction — the worst case is skipping a copy that had already
+    /// been made correctly.
+    var yieldToExistingCopy: Bool
+
+    /// Discard the styling flavors an app's own copy puts on the pasteboard,
+    /// keeping only plain text. List structure survives either way — bullets
+    /// and newlines are real characters in the plain-text flavor — so this only
+    /// controls fonts, colors and other formatting.
+    ///
+    /// Off by default: pasting keeps the source's formatting, which is what
+    /// pressing ⌘C yourself would do.
+    ///
+    /// Only affects apps in `preferNativeCopyApps`. Everywhere else the text
+    /// comes from accessibility, which returns a plain string and has no
+    /// styling to preserve in the first place.
     var plainTextOnly: Bool
 
     /// Last resort only: synthesize Cmd+C when accessibility finds **no**
@@ -88,9 +112,16 @@ struct Config: Codable {
         ],
         settleMilliseconds: 180,
         maxCharacters: 1_000_000,
-        preferNativeCopy: true,
-        nativeCopyDisabledApps: [],
-        plainTextOnly: true,
+        // Seeded from measurement: these are the apps whose accessibility text
+        // loses list structure. Safari is deliberately absent.
+        preferNativeCopyApps: [
+            "com.google.Chrome",
+            "com.linear",
+            "com.apple.Notes",
+        ],
+        preferNativeCopyEverywhere: false,
+        yieldToExistingCopy: true,
+        plainTextOnly: false,
         enableCopyFallback: false,
         dragThreshold: 4.0,
         // Measured 2026-07-25 across Safari, Chrome and Linear: every real
@@ -129,12 +160,15 @@ struct Config: Codable {
             ?? fallback.settleMilliseconds
         maxCharacters =
             try container.decodeIfPresent(Int.self, forKey: .maxCharacters) ?? fallback.maxCharacters
-        preferNativeCopy =
-            try container.decodeIfPresent(Bool.self, forKey: .preferNativeCopy)
-            ?? fallback.preferNativeCopy
-        nativeCopyDisabledApps =
-            try container.decodeIfPresent([String].self, forKey: .nativeCopyDisabledApps)
-            ?? fallback.nativeCopyDisabledApps
+        preferNativeCopyApps =
+            try container.decodeIfPresent([String].self, forKey: .preferNativeCopyApps)
+            ?? fallback.preferNativeCopyApps
+        preferNativeCopyEverywhere =
+            try container.decodeIfPresent(Bool.self, forKey: .preferNativeCopyEverywhere)
+            ?? fallback.preferNativeCopyEverywhere
+        yieldToExistingCopy =
+            try container.decodeIfPresent(Bool.self, forKey: .yieldToExistingCopy)
+            ?? fallback.yieldToExistingCopy
         plainTextOnly =
             try container.decodeIfPresent(Bool.self, forKey: .plainTextOnly) ?? fallback.plainTextOnly
         enableCopyFallback =
@@ -153,15 +187,17 @@ struct Config: Codable {
 
     init(
         excludedBundleIDs: [String], settleMilliseconds: Int, maxCharacters: Int,
-        preferNativeCopy: Bool, nativeCopyDisabledApps: [String], plainTextOnly: Bool,
+        preferNativeCopyApps: [String], preferNativeCopyEverywhere: Bool,
+        yieldToExistingCopy: Bool, plainTextOnly: Bool,
         enableCopyFallback: Bool, dragThreshold: Double, maxAncestorWalk: Int,
         markClipboardConcealed: Bool
     ) {
         self.excludedBundleIDs = excludedBundleIDs
         self.settleMilliseconds = settleMilliseconds
         self.maxCharacters = maxCharacters
-        self.preferNativeCopy = preferNativeCopy
-        self.nativeCopyDisabledApps = nativeCopyDisabledApps
+        self.preferNativeCopyApps = preferNativeCopyApps
+        self.preferNativeCopyEverywhere = preferNativeCopyEverywhere
+        self.yieldToExistingCopy = yieldToExistingCopy
         self.plainTextOnly = plainTextOnly
         self.enableCopyFallback = enableCopyFallback
         self.dragThreshold = dragThreshold

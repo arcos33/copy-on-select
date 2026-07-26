@@ -120,8 +120,11 @@ final class Engine {
     private func schedule(at point: CGPoint) {
         pending?.cancel()
         let gen = nextGeneration()
+        // Recorded before the settle delay so we can tell whether anything else
+        // copied while we were resolving this gesture.
+        let baseline = Clipboard.changeCount
         let work = DispatchWorkItem { [weak self] in
-            self?.resolveSelection(at: point, generation: gen)
+            self?.resolveSelection(at: point, generation: gen, clipboardBaseline: baseline)
         }
         pending = work
         queue.asyncAfter(
@@ -150,7 +153,7 @@ final class Engine {
         return value == generation
     }
 
-    private func resolveSelection(at point: CGPoint, generation gen: Int) {
+    private func resolveSelection(at point: CGPoint, generation gen: Int, clipboardBaseline: Int) {
         // Rung 1: the element that was actually clicked. Starting here — rather
         // than from the focused element — is what makes the result attributable
         // to this gesture instead of to whatever is selected elsewhere.
@@ -188,25 +191,43 @@ final class Engine {
             // Accessibility has confirmed a safe, non-empty selection, and has
             // given us a usable value. Everything past this point is about
             // FIDELITY, not about whether to copy.
-            //
+
+            // Something else copied while we were resolving — a terminal's own
+            // copy-on-select, most likely. Its result is authoritative for its
+            // own content; do not overwrite it.
+            if config.yieldToExistingCopy, Clipboard.changeCount != clipboardBaseline { return }
+
+            guard shouldUseNativeCopy(pid: pid) else {
+                guard isCurrent(gen) else { return }
+                commit(axText, force: false)
+                return
+            }
+
             // The app's own copy preserves list markers, numbering and line
-            // breaks that accessibility flattens, so prefer it — but keep the
-            // accessibility text as a guaranteed fallback if the copy is
-            // blocked (secure input mode, an app that rebinds Cmd+C).
-            if shouldUseNativeCopy(pid: pid) {
-                if let native = nativeCopy(targetPID: pid),
-                    native.count <= config.maxCharacters
+            // breaks that accessibility flattens. It runs off this queue
+            // because it blocks for up to half a second, and the settle timers
+            // for later gestures are scheduled here.
+            fallbackQueue.async { [weak self] in
+                guard let self, self.isCurrent(gen) else { return }
+                let native = self.nativeCopy(targetPID: pid, generation: gen)
+                guard self.isCurrent(gen) else { return }
+
+                // Use the app's version only if it is recognisably the same
+                // selection accessibility just confirmed. This is what stops a
+                // copy handler on a web page from substituting its own text,
+                // and what catches the app copying a different pane's
+                // selection than the one under the cursor.
+                if let native, native.count <= self.config.maxCharacters,
+                    self.corresponds(native: native, accessibility: axText)
                 {
-                    guard isCurrent(gen) else { return }
                     // Force the rewrite: the string already matches what the
                     // app put on the pasteboard, and rewriting is what strips
                     // its styling flavors.
-                    commit(native, force: config.plainTextOnly)
-                    return
+                    self.commit(native, force: self.config.plainTextOnly)
+                } else {
+                    self.commit(axText, force: false)
                 }
             }
-            guard isCurrent(gen) else { return }
-            commit(axText, force: false)
             return
 
         case .none:
@@ -215,10 +236,15 @@ final class Engine {
 
         // Last resort, off by default: accessibility found no selection at all.
         // Firing here is a guess, which is why it beeps in apps where nothing
-        // was actually selected.
+        // was actually selected. There is no accessibility text to compare
+        // against or fall back to, so this path is inherently less trustworthy.
         guard config.enableCopyFallback, AX.isFallbackRole(clicked) else { return }
+        if config.yieldToExistingCopy, Clipboard.changeCount != clipboardBaseline { return }
         fallbackQueue.async { [weak self] in
-            guard let self, let native = self.nativeCopy(targetPID: pid) else { return }
+            guard let self, self.isCurrent(gen) else { return }
+            guard let native = self.nativeCopy(targetPID: pid, generation: gen),
+                native.count <= self.config.maxCharacters
+            else { return }
             guard self.isCurrent(gen) else { return }
             self.commit(native, force: self.config.plainTextOnly)
         }
@@ -227,11 +253,37 @@ final class Engine {
     /// Whether this app's own copy should be preferred over the accessibility
     /// text for the same selection.
     private func shouldUseNativeCopy(pid: pid_t) -> Bool {
-        guard config.preferNativeCopy else { return false }
+        if config.preferNativeCopyEverywhere { return true }
         guard let bundleID = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier else {
             return false
         }
-        return !config.nativeCopyDisabledApps.contains(bundleID)
+        return config.preferNativeCopyApps.contains(bundleID)
+    }
+
+    /// Whether the app's copy is recognisably the same selection accessibility
+    /// reported.
+    ///
+    /// The legitimate difference between the two is exactly list markers,
+    /// numbering and whitespace — which is why those are stripped before
+    /// comparing. Anything left over is content that was not in the selection:
+    /// a page's copy handler appending its own text, or the app copying a
+    /// different selection than the one under the cursor.
+    private func corresponds(native: String, accessibility: String) -> Bool {
+        let a = Self.normalizeForComparison(native)
+        let b = Self.normalizeForComparison(accessibility)
+        if a == b { return true }
+        guard !b.isEmpty, a.contains(b) else { return false }
+        // Allow a little slack for numbering digits the app adds.
+        let slack = max(20, b.count / 10)
+        return a.count - b.count <= slack
+    }
+
+    private static func normalizeForComparison(_ text: String) -> String {
+        let markers: Set<Character> = ["•", "◦", "▪", "‣", "-", "–", "—", "*", ".", ")"]
+        return String(
+            text.lowercased().filter { character in
+                !character.isWhitespace && !markers.contains(character)
+            })
     }
 
     private func isExcluded(pid: pid_t) -> Bool {
@@ -280,7 +332,7 @@ final class Engine {
     /// caller decide: on success the value is rewritten as plain text only, and
     /// on failure the caller falls back to the accessibility text it already
     /// holds. Either way the clipboard is restored if this damaged it.
-    private func nativeCopy(targetPID: pid_t) -> String? {
+    private func nativeCopy(targetPID: pid_t, generation gen: Int) -> String? {
         guard isSafeToSynthesizeCopy(targetPID: targetPID) else { return nil }
 
         let snapshot = Clipboard.snapshot()
@@ -295,6 +347,10 @@ final class Engine {
         // to a password field, or another app can come forward — and the
         // keystroke goes wherever focus is *now*.
         guard isSafeToSynthesizeCopy(targetPID: targetPID) else { return nil }
+
+        // Posting is a side effect on the user's clipboard, so it must not
+        // happen for a gesture that has already been superseded.
+        guard isCurrent(gen) else { return nil }
 
         postCommandC()
 
