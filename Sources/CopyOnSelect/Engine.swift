@@ -79,6 +79,15 @@ final class Engine {
         case .leftMouseDown:
             downLocation = event.location
             hasDown = true
+            // Clipboard baseline is captured at gesture START, not mouse-up.
+            // A user who finishes a drag and hits Cmd+C in one motion can land
+            // the copy before a mouse-up baseline would be taken, absorbing it
+            // into the baseline and blinding every later check. Anything
+            // written after the drag began is foreign. (Dispatched: no IPC in
+            // the tap callback.)
+            queue.async { [weak self] in
+                self?.clipboardBaseline = Clipboard.changeCount
+            }
 
         case .leftMouseUp:
             guard isEnabled else { return }
@@ -119,20 +128,6 @@ final class Engine {
     private func schedule(down: CGPoint, up: CGPoint, wasDrag: Bool) {
         pending?.cancel()
         let gen = nextGeneration()
-
-        // The clipboard baseline is captured on the worker queue, NOT here.
-        //
-        // This runs inside the event-tap callback, and reading
-        // NSPasteboard.changeCount is cross-process IPC that can block. A slow
-        // tap callback makes the kernel disable the tap, which stops every
-        // subsequent gesture from being seen at all — the app keeps running and
-        // silently never copies again. Nothing in this callback may do IPC.
-        //
-        // The queue is serial and this is dispatched immediately, so the
-        // baseline is still taken at gesture time rather than after the settle.
-        queue.async { [weak self] in
-            self?.clipboardBaseline = Clipboard.changeCount
-        }
 
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
@@ -416,6 +411,23 @@ final class Engine {
             if let guardCount {
                 let current = Clipboard.changeCount
                 if current != guardCount, !self.isOwnWrite(current) { return }
+            }
+            // Timing-proof half of the protection: if the clipboard already
+            // holds a RICH-flavored copy of this same text (the user's own
+            // Cmd+C, whenever it landed - even before our baseline), a plain
+            // rewrite would only downgrade it. Skip. `force` writes are the
+            // deliberate flavor-stripping path and are exempt.
+            if !force, let existing = Clipboard.currentString {
+                let pasteboardTypes = (NSPasteboard.general.types ?? []).map(\.rawValue)
+                let isRich = pasteboardTypes.contains {
+                    $0.lowercased().contains("rtf") || $0.lowercased().contains("html")
+                        || $0.lowercased().contains("web")
+                }
+                if isRich,
+                    Self.normalizeForComparison(existing) == Self.normalizeForComparison(text)
+                {
+                    return
+                }
             }
             if let count = Clipboard.write(text, concealed: concealed, force: force) {
                 self.noteOwnWrite(count)
