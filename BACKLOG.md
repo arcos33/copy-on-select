@@ -196,12 +196,16 @@ password. Not a viable default experience.
 
 Ranked options:
 
-- [ ] **DECIDED (2026-07-25): Homebrew is the distribution route.**
-      **Homebrew formula (builds from source)** — the natural fit. One command,
-      and it *preserves* the build-it-yourself property the README argues for.
-      Needs only the **Command Line Tools**, not Xcode (verified: CLT ships
-      `swift`, `swiftc`, `swift-build`), and Homebrew requires CLT anyway — so
-      brew users need nothing extra.
+- [x] **SHIPPED (2026-07-25): Homebrew formula, builds from source.**
+      Tap: `github.com/yauyauyauhen/homebrew-tap`, install via
+      `brew install yauyauyauhen/tap/copy-on-select`. Tested end-to-end (built
+      in 41s, formula test passes). Includes a `service` block so
+      `brew services start` manages the LaunchAgent, and caveats explaining the
+      Accessibility grant and that upgrades re-prompt it (new binary identity).
+      Per release: bump URL + sha256 in the formula — two lines.
+      **Gotcha for future releases:** GitHub can serve the tag tarball's 404
+      page with HTTP 200 right after a tag push — verify the download is gzip
+      before hashing, or the formula gets the hash of an error page.
 - [ ] **GitHub Actions + artifact attestation** — a Sigstore-signed statement
       that a specific binary came from a specific workflow, repo and commit,
       verified with `gh attestation verify`. Free, and default-on for public
@@ -219,14 +223,22 @@ Ranked options:
       user must visit System Settings for Accessibility regardless — and alone
       it reintroduces "trust my build", so it should be paired with attestation.
 
-## Before publishing
+## Publishing — DONE 2026-07-25
 
-- [ ] **Review the README text with Eugene.** Required, not optional.
-- [ ] **Measure the real line count** and fix any claim that implies "~60 lines".
-      Currently ~1300 including comments; the core selection→clipboard logic is
-      much smaller and can be pointed at specifically.
-- [ ] Check `copy-on-select` is available as a repo name.
-- [ ] Push the real multi-commit history, not a squashed import.
-- [ ] Confirm the GitHub noreply identity is on every commit (a `pre-push` hook
-      already enforces this).
-- [ ] **Never push without explicit confirmation.**
+Published as `github.com/yauyauyauhen/copy-on-select`, tagged v0.1.0.
+
+- [x] README reviewed with Eugene (he caught the placeholder install URL);
+      Install section moved above the rationale, Homebrew added, agent-neutral
+      wording.
+- [x] Repo name was available.
+- [x] Real multi-commit history pushed (private first, reviewed, then flipped
+      public).
+- [x] Noreply identity verified on every commit, both repos, author and
+      committer; pre-push hooks installed in both.
+- [x] Commit messages audited for anything personal or unprofessional: clean.
+- [x] Hygiene scan (secrets, personal identifiers, .DS_Store, history): clean.
+- [x] About description + topics set.
+
+**Standing rules, still in force:** never push without Eugene's explicit
+confirmation; the line-count claim in the README should be re-measured if it is
+ever sharpened (currently it says "small enough to read", which stays true).
