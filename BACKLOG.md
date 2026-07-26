@@ -9,15 +9,17 @@ whenever debugging stops**, and delete the section once it is all reverted.
 
 | State | Where | Action to revert |
 |---|---|---|
-| `enableCopyFallback: false` | `~/Library/Application Support/copy-on-select/config.json` | Decide the real default, then either delete the file or write the intended config. **This is a live deviation from the shipped default.** |
-| Probe binaries + sources (`axprobe*`, `wkhelper*`, `upwalk`, `winlist`, `dump`, `probe4/5`) | session scratchpad under `/private/tmp/claude-501/…` | Delete. Session-isolated so harmless, but do not let any of it drift into the repo. |
+| Probe binaries + sources (`axprobe*`, `wkhelper*`, `upwalk`, `winlist`, `dump`, `probe4/5`, `selprobe*`, `focprobe`, `clipwatch`, `boundsrig`, `fidelity`) | session scratchpad under `/private/tmp/claude-501/…` | Delete. Session-isolated so harmless, but do not let any of it drift into the repo. |
 | Diagnostic logging, if added | `diagnostics` config key + log calls | Must be **off by default**, and must never log selection content — only timings, roles, and lengths. Consider removing entirely before publishing. |
 | Clipboard sentinels (`SENTINEL-…`) | the clipboard | Self-clearing; nothing to do. Just do not mistake one for real data. |
 | `wkhelper` GUI windows | were left running by a review agent | Already killed (2026-07-25). Re-check with `ps aux \| grep -i wkhelper` if odd windows appear. |
 
 Deliberately **not** temporary (leave these alone): the installed binary in
-`~/Applications`, the LaunchAgent, the `copy-on-select-local` certificate, and
-the Accessibility grant.
+`~/Applications`, the LaunchAgent, the `copy-on-select-local` certificate, the
+Accessibility grant, and the live config file — its two deviations from
+defaults are Eugene's real preferences (trimmed `excludedBundleIDs`: editors
+and Terminal/iTerm are active; `nativeCopyDisabledApps`: the five
+terminal-hosting apps stay accessibility-only).
 
 
 Things worth doing the next time this gets rebuilt. Nothing here is urgent —
@@ -32,56 +34,44 @@ that is the whole reason for using a certificate instead of ad-hoc signing.
 
 ---
 
-## Menu bar icon (batch these together)
+## Menu bar icon
 
-The current icon is the Unicode glyph `⧉` set as `button.title`, which is why it
-looks slightly off next to native menu bar items.
+**Shipped 2026-07-25:** SF Symbol `doc.on.doc` at 13.6pt, nudged 2px down via a
+padded canvas (the status item centres its image), tuned by eye with Eugene.
+Distinct symbols for active / paused (`pause.circle`) / unhealthy
+(`exclamationmark.triangle`), template mode for light/dark menu bars.
 
-- [ ] **Increase size ~20%.** One line: `button.font = NSFont.systemFont(ofSize: 17)`
-      (default is ~14).
-- [ ] **Fix vertical alignment — it sits too high.** Text glyphs align on their
-      baseline, not the optical centre of the menu bar. Fix with a baseline
-      offset on an attributed title:
-      `NSAttributedString(string:, attributes: [.baselineOffset: -1])`
-      (tune the value), or better, switch to an image (below) which aligns
-      properly by default.
-- [ ] **Replace the glyph with an SF Symbol.**
-      `button.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription:)`
-      plus `withSymbolConfiguration(.init(pointSize:weight:))`, and set
-      `image.isTemplate = true` so it adapts to light/dark menu bars. This
-      solves sizing and alignment properly instead of nudging a text baseline.
 - [ ] **Consider making size/offset config keys** (`menuBarIconSize`,
-      `menuBarIconOffset`) so they can be changed without a rebuild. Worth it if
-      this is ever published — other people will have opinions about the icon,
-      and "edit config.json, restart" beats "recompile".
-- [ ] The paused-state glyph is currently `◌`. Revisit once the icon is an SF
-      Symbol; a filled/slashed variant of the same symbol would read better than
-      a different character.
+      `menuBarIconOffset`) so future tweaks need no rebuild. Worth it if this is
+      published — other people will have opinions about the icon.
 
 ---
 
-## Unverified behaviour (highest value work)
+## Verification status (refreshed 2026-07-25 end of day)
 
-Verified working: native AppKit text (TextEdit et al.), Finder must-not-fire,
-launchd start with its own permission, non-string clipboard preserved.
+**Verified in real use:** native AppKit text (TextEdit, Stickies, Notes);
+**Safari via text markers** (structure + styles); **Chrome and Linear**
+(live-probed and in daily use); the **native-⌘C path runs constantly** as the
+everywhere default (styled copies confirmed by flavor inspection); numbered
+lists survive (subsequence check); rapid-fire selections; the **fast-⌘C race**
+(reproduced by Eugene, recorded by clipwatch, fixed by mouse-down baseline +
+write-time guard + rich-equivalence skip, then re-confirmed by Eugene); **B1
+live-tested** (Linear card drag left `MARKER 42` intact); Finder must-not-fire;
+non-string clipboard preserved; launchd start on its own grant.
 
-- [ ] **Browsers are completely untested.** The WebKit text-marker path
-      (`AXSelectedTextMarkerRange` + `AXStringForTextMarkerRange`) and the
-      Chromium `AXManualAccessibility` toggle were both added in response to a
-      review that measured the problem, but neither has ever run. Test Safari
-      and Chrome; if they fail, this is the biggest functional gap.
-- [ ] **The ⌘C fallback has never executed.** All the delicate logic — modifier
-      waiting, `changeCount` polling, snapshot/restore, the pre-post password
-      re-check — is unexercised. Either deliberately trigger it (a Java/Qt app,
-      or something with poor accessibility support) or decide the accessibility
-      path is enough and ship `enableCopyFallback: false` as the default.
-- [ ] **Finish the must-not-fire matrix:** title-bar double-click (window zoom),
-      tmux/vim with mouse reporting, text drag-and-drop within a document, and
-      **password fields** (native, Safari, Chrome) — the last one deliberately
-      and carefully, since it is the failure that would end the project's
-      credibility.
-- [ ] Endurance: leave it running 1h+ idle, then select, to prove the
-      `.tapDisabledByTimeout` re-enable path actually fires.
+**Still unverified — ranked:**
+
+- [ ] **Password fields** (native, Safari, Chrome) — deliberately and
+      carefully, with a fake password. The one failure that would end the
+      project's credibility, and it has never been explicitly tested.
+- [ ] tmux/vim with mouse reporting; title-bar double-click; text drag-and-drop
+      within a document.
+- [ ] The **blind last-resort path** (`enableCopyFallback`, off by default) —
+      still never executed; its only real-world appearance was the old Stickies
+      beep. Fine to leave off and untested; do not enable without testing.
+- [ ] Endurance: the `.tapDisabledByTimeout` re-enable path specifically. (The
+      app survived a full day of heavy use, but the tap never provably died of
+      a timeout — the one death observed was the since-fixed IPC bug.)
 - [ ] Behaviour alongside a clipboard manager (Maccy/Raycast) — history
       pollution is the most likely day-to-day complaint.
 
@@ -103,10 +93,16 @@ an embedded TUI, multi-pane focus. Settled state:
   Cursor overwrites external edits to its settings.json while running — any
   future change must be made in Cursor's own settings UI.
 - **Preview pane: accessibility text only** (Cursor is in
-  `nativeCopyDisabledApps`). Correct plain text, no styles. The synthetic ⌘C
-  lands in whatever pane holds *keyboard* focus, which a mouse selection in
-  Preview does not reliably move, so the native path produced wrong-pane
-  content that the correspondence check rightly rejected.
+  `nativeCopyDisabledApps`). Correct plain text, no styles, and the first
+  bullet of a list is missing when the drag starts on the text (the `•` is a
+  ::marker pseudo-element outside the selected range — selection-boundary
+  behaviour, not a bug). **The cause of the old native-path failure is
+  unproven:** the wrong-pane/focus story was inference, and evidence now cuts
+  against it — Eugene's manual ⌘C reaches Preview and produces the full rich
+  copy (first bullet included). The failure may have been the since-fixed
+  substring correspondence check. **Worth one measured retry:** re-enable
+  native for Cursor and test Preview; if it works now, Preview gains styles,
+  line breaks and the first bullet in one move.
 - **Claude Code TUI pane: handles its own copying** (OSC 52); the yield check
   defers to it.
 
@@ -117,11 +113,13 @@ Bugs 1–4 of that review are fixed (own-write bookkeeping unconditional after a
 own-write count read inside Clipboard.write to shrink the misattribution
 window; last-resort path restores again). Still open, ranked:
 
-- [ ] **Baseline timing**: the clipboard baseline block can run late if the
-      serial queue is stuck in a slow AX resolution, absorbing a foreign copy
-      into the baseline → yield passes → we overwrite a third party's write.
-      Guaranteed order, unguaranteed timing. Fix: capture via a dedicated queue
-      or timestamp the baseline.
+- [x] **Baseline timing — substantially closed 2026-07-25:** baseline is now
+      captured at mouse-DOWN, a write-time guard re-checks the changeCount on
+      the write's own queue immediately before writing, and a rich-equivalence
+      skip refuses to downgrade an equivalent rich copy regardless of timing.
+      Residual: the baseline block still runs on the serial queue and could be
+      captured late behind a slow resolution — but the write-time guard now
+      catches what a late baseline would have missed.
 - [ ] **`markClipboardConcealed` silently ineffective on the native path**:
       with everywhere-native + plainTextOnly=false, commit is usually an
       equal-content skip, so the concealed marker never lands. If the flag is
