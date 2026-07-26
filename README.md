@@ -132,31 +132,36 @@ support, in exchange for a much smaller chance of putting the wrong thing on
 your clipboard. For an app whose entire reason for existing is a wrong-clipboard
 bug, that is the right trade.
 
-### It also synthesizes ⌘C in a few apps — read this
+### It synthesizes ⌘C — read this
 
-Accessibility returns text, not structure. Measured across apps: Chrome and
-Linear return zero line breaks for a bulleted list, and Notes returns no bullet
-characters at all, because list markers are formatting rather than text. Safari
-is fine — it preserves both.
+Accessibility answers *whether* something is selected far better than it answers
+*what*. Measured across apps: Chrome and Linear return zero line breaks for a
+bulleted list, and Notes returns no bullet characters at all, because list
+markers are formatting rather than text.
 
-So for a short list of apps (`preferNativeCopyApps`, default Chrome, Linear and
-Notes) the app **synthesizes a ⌘C keystroke** after accessibility has confirmed
-a selection, and uses the app's own copy, which serialises lists properly.
+So once accessibility has confirmed a safe selection, the app **synthesizes a
+⌘C keystroke** and uses the app's own copy — which serialises lists, line breaks
+and styling exactly as if you had pressed ⌘C yourself. That is the default
+(`preferNativeCopyEverywhere`).
 
-This is worth knowing because it is a real capability, and because it has a real
-downside:
+Know what this means before trusting it:
 
-- **The app controls the result.** A web page can register a copy handler that
-  rewrites what lands on the clipboard. The accessibility read cannot be
-  influenced that way.
-- Mitigated by a **correspondence check**: the app's text is used only when it
-  matches what accessibility reported, once list markers and whitespace are
-  stripped. Anything else falls back to the accessibility text.
-- It is an **allowlist, not a default**, precisely so this runs only where it
-  measurably helps. `preferNativeCopyEverywhere` turns it on globally if you
-  want structure everywhere and accept the trade.
-- If the copy is blocked — secure input mode, an app that rebinds ⌘C — the
-  accessibility text is used, so it degrades rather than fails.
+- **The mechanism is identical to pressing ⌘C yourself.** A web page's copy
+  handler runs on your manual copies today; this fires the same event, just on
+  every selection instead of every deliberate copy. No new mechanism — more
+  occasions.
+- **A correspondence check makes each copy stricter than a manual one**: the
+  app's text is used only if everything accessibility saw appears in it, in
+  order, with only bounded extras (list numbering). A page that appends or
+  substitutes text fails the check and the clean accessibility text is written
+  instead — which is better than a manual ⌘C, which would have kept the junk.
+- The keystroke is **never sent** when accessibility reports a password field,
+  when macOS secure input mode is active, or when the frontmost app is not the
+  one the selection came from. In those cases — or if the copy produces
+  nothing — the accessibility text is used, so it degrades rather than fails.
+- Per-app opt-out: `nativeCopyDisabledApps`. Turning
+  `preferNativeCopyEverywhere` off narrows it to the `preferNativeCopyApps`
+  list (the apps where accessibility measurably loses structure).
 
 The synthetic keystroke is never sent when accessibility reports a password
 field, when macOS secure input mode is active, or when the frontmost app is not
@@ -207,8 +212,9 @@ default one).
 | `excludedBundleIDs` | Finder + several terminals | apps to ignore entirely |
 | `settleMilliseconds` | `180` | delay before reading the selection |
 | `maxCharacters` | `1000000` | ignore larger selections (`⌘A` in a big file) |
-| `preferNativeCopyApps` | Chrome, Linear, Notes | apps where the app's own ⌘C is used, for list structure |
-| `preferNativeCopyEverywhere` | `false` | use the app's own copy in every app |
+| `preferNativeCopyEverywhere` | `true` | use the app's own ⌘C everywhere (structure + styling) |
+| `preferNativeCopyApps` | Chrome, Linear, Notes | the narrower list used when everywhere is off |
+| `nativeCopyDisabledApps` | `[]` | apps where the native copy is never used |
 | `yieldToExistingCopy` | `true` | don't overwrite a copy something else already made |
 | `plainTextOnly` | `false` | drop styling from a native copy; structure survives either way |
 | `enableCopyFallback` | `false` | last resort: ⌘C when accessibility finds *no* selection |

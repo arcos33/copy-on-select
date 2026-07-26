@@ -211,8 +211,12 @@ final class Engine {
 
             // Something else copied while we were resolving — a terminal's own
             // copy-on-select, most likely. Its result is authoritative for its
-            // own content; do not overwrite it.
-            if config.yieldToExistingCopy, Clipboard.changeCount != clipboardBaseline { return }
+            // own content; do not overwrite it. Our own just-landed write for a
+            // previous gesture is not "something else".
+            if config.yieldToExistingCopy {
+                let current = Clipboard.changeCount
+                if current != clipboardBaseline, !isOwnWrite(current) { return }
+            }
 
             guard shouldUseNativeCopy(pid: pid) else {
                 guard isCurrent(gen) else { return }
@@ -257,7 +261,10 @@ final class Engine {
         // was actually selected. There is no accessibility text to compare
         // against or fall back to, so this path is inherently less trustworthy.
         guard config.enableCopyFallback, AX.isFallbackRole(clicked) else { return }
-        if config.yieldToExistingCopy, Clipboard.changeCount != clipboardBaseline { return }
+        if config.yieldToExistingCopy {
+            let current = Clipboard.changeCount
+            if current != clipboardBaseline, !isOwnWrite(current) { return }
+        }
         fallbackQueue.async { [weak self] in
             guard let self, self.isCurrent(gen) else { return }
             guard let native = self.nativeCopy(
@@ -270,12 +277,14 @@ final class Engine {
     }
 
     /// Whether this app's own copy should be preferred over the accessibility
-    /// text for the same selection.
+    /// text for the same selection. The disabled list wins even in
+    /// everywhere-mode, so there is always a per-app escape hatch.
     private func shouldUseNativeCopy(pid: pid_t) -> Bool {
-        if config.preferNativeCopyEverywhere { return true }
         guard let bundleID = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier else {
             return false
         }
+        if config.nativeCopyDisabledApps.contains(bundleID) { return false }
+        if config.preferNativeCopyEverywhere { return true }
         return config.preferNativeCopyApps.contains(bundleID)
     }
 
@@ -291,10 +300,27 @@ final class Engine {
         let a = Self.normalizeForComparison(native)
         let b = Self.normalizeForComparison(accessibility)
         if a == b { return true }
-        guard !b.isEmpty, a.contains(b) else { return false }
-        // Allow a little slack for numbering digits the app adds.
+        guard !b.isEmpty else { return false }
+
+        // Subsequence, not substring: everything accessibility saw must appear
+        // in the native copy, in order, but the native copy may interleave
+        // extras. The legitimate extras are exactly numbered-list digits —
+        // "1. First 2. Second" against accessibility's "First Second" — which
+        // a contains() check wrongly rejects because the digits interrupt the
+        // match. An attacker is still stuck: nothing can be removed or
+        // replaced, and additions are capped by the slack.
+        var extra = 0
+        var remainder = b[...]
+        for character in a {
+            if let next = remainder.first, character == next {
+                remainder = remainder.dropFirst()
+            } else {
+                extra += 1
+            }
+        }
+        guard remainder.isEmpty else { return false }
         let slack = max(20, b.count / 10)
-        return a.count - b.count <= slack
+        return extra <= slack
     }
 
     private static func normalizeForComparison(_ text: String) -> String {
@@ -332,13 +358,34 @@ final class Engine {
         return true
     }
 
+    /// The changeCount produced by our own most recent write. Needed by the
+    /// yield check: our commit for gesture N lands on the main queue slightly
+    /// after gesture N+1 captured its baseline, so without this, the app's own
+    /// write looks like a third party copying and N+1 wrongly yields.
+    private let ownWriteLock = NSLock()
+    private var lastOwnWriteCount = -1
+
+    private func noteOwnWrite(_ count: Int) {
+        ownWriteLock.lock()
+        lastOwnWriteCount = count
+        ownWriteLock.unlock()
+    }
+
+    private func isOwnWrite(_ count: Int) -> Bool {
+        ownWriteLock.lock()
+        defer { ownWriteLock.unlock() }
+        return count == lastOwnWriteCount
+    }
+
     private func commit(_ text: String, force: Bool) {
         // No separate "freshness" bookkeeping: Clipboard.write already skips a
         // write whose content equals the current clipboard, which is the same
         // check without the false negatives a cached key would introduce.
         let concealed = config.markClipboardConcealed
-        DispatchQueue.main.async {
-            Clipboard.write(text, concealed: concealed, force: force)
+        DispatchQueue.main.async { [weak self] in
+            if Clipboard.write(text, concealed: concealed, force: force) {
+                self?.noteOwnWrite(Clipboard.changeCount)
+            }
         }
     }
 

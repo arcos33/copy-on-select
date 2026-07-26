@@ -35,9 +35,15 @@ struct Config: Codable {
     var preferNativeCopyApps: [String]
 
     /// Use the app's own copy everywhere rather than only in
-    /// `preferNativeCopyApps`. For testing, or for anyone who would rather have
-    /// list structure everywhere and accepts the trade above.
+    /// `preferNativeCopyApps`. Structure and styling everywhere — the result is
+    /// what pressing ⌘C yourself would produce, with the correspondence check
+    /// rejecting anything a page's copy handler injected. The risk mechanism is
+    /// identical to a manual ⌘C; this only fires it on more occasions.
     var preferNativeCopyEverywhere: Bool
+
+    /// Apps where the native copy is never used, even in everywhere-mode.
+    /// The per-app escape hatch for an app whose ⌘C misbehaves.
+    var nativeCopyDisabledApps: [String]
 
     /// If something else wrote to the clipboard while this gesture was being
     /// resolved, leave it alone.
@@ -119,7 +125,8 @@ struct Config: Codable {
             "com.linear",
             "com.apple.Notes",
         ],
-        preferNativeCopyEverywhere: false,
+        preferNativeCopyEverywhere: true,
+        nativeCopyDisabledApps: [],
         yieldToExistingCopy: true,
         plainTextOnly: false,
         enableCopyFallback: false,
@@ -166,6 +173,9 @@ struct Config: Codable {
         preferNativeCopyEverywhere =
             try container.decodeIfPresent(Bool.self, forKey: .preferNativeCopyEverywhere)
             ?? fallback.preferNativeCopyEverywhere
+        nativeCopyDisabledApps =
+            try container.decodeIfPresent([String].self, forKey: .nativeCopyDisabledApps)
+            ?? fallback.nativeCopyDisabledApps
         yieldToExistingCopy =
             try container.decodeIfPresent(Bool.self, forKey: .yieldToExistingCopy)
             ?? fallback.yieldToExistingCopy
@@ -188,7 +198,7 @@ struct Config: Codable {
     init(
         excludedBundleIDs: [String], settleMilliseconds: Int, maxCharacters: Int,
         preferNativeCopyApps: [String], preferNativeCopyEverywhere: Bool,
-        yieldToExistingCopy: Bool, plainTextOnly: Bool,
+        nativeCopyDisabledApps: [String], yieldToExistingCopy: Bool, plainTextOnly: Bool,
         enableCopyFallback: Bool, dragThreshold: Double, maxAncestorWalk: Int,
         markClipboardConcealed: Bool
     ) {
@@ -197,6 +207,7 @@ struct Config: Codable {
         self.maxCharacters = maxCharacters
         self.preferNativeCopyApps = preferNativeCopyApps
         self.preferNativeCopyEverywhere = preferNativeCopyEverywhere
+        self.nativeCopyDisabledApps = nativeCopyDisabledApps
         self.yieldToExistingCopy = yieldToExistingCopy
         self.plainTextOnly = plainTextOnly
         self.enableCopyFallback = enableCopyFallback
