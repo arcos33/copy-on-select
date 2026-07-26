@@ -23,6 +23,36 @@ to trust across it.
 
 ---
 
+## Install
+
+**Homebrew:**
+
+```sh
+brew install yauyauyauhen/tap/copy-on-select
+brew services start copy-on-select
+```
+
+This builds from source on your machine (that is the point). Then grant
+Accessibility: System Settings → Privacy & Security → Accessibility → enable
+`copy-on-select`. Note: upgrades produce a new binary, so macOS asks for the
+Accessibility approval again after each `brew upgrade`.
+
+**Or let your coding agent do it** (Claude Code, Codex, etc.) — paste this:
+
+> Install copy-on-select by following https://github.com/yauyauyauhen/copy-on-select/blob/main/install.md
+
+Two steps need a human regardless: creating the code-signing certificate and
+granting Accessibility are both GUI actions. The agent will stop and tell you.
+
+**Manual install** is in [`install.md`](install.md) as well — the same steps,
+written so a person or an agent can follow them.
+
+Verify any time:
+
+```sh
+copy-on-select --check
+```
+
 ## Why this exists, and why it is built this way
 
 I got the habit from Claude Code's TUI, which copies text as soon as you select
@@ -178,26 +208,6 @@ harmful:
 - **Finder** — a drag is a file drag.
 
 Defaults are in `Config.swift` and can be overridden in your config file.
-
----
-
-## Install
-
-**Fastest — let your agent do it.** Paste this into Claude Code:
-
-> Install copy-on-select by following https://github.com/USER/copy-on-select/blob/main/install.md
-
-Two steps need a human regardless: creating the code-signing certificate and
-granting Accessibility are both GUI actions. The agent will stop and tell you.
-
-Manual install is in [`install.md`](install.md) as well — the same steps, written
-so a person or an agent can follow them.
-
-Verify any time:
-
-```sh
-copy-on-select --check
-```
 
 ---
 
