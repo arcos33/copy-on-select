@@ -209,7 +209,8 @@ final class Engine {
             // for later gestures are scheduled here.
             fallbackQueue.async { [weak self] in
                 guard let self, self.isCurrent(gen) else { return }
-                let native = self.nativeCopy(targetPID: pid, generation: gen)
+                let native = self.nativeCopy(
+                    targetPID: pid, generation: gen, restoreOnFailure: false)
                 guard self.isCurrent(gen) else { return }
 
                 // Use the app's version only if it is recognisably the same
@@ -242,7 +243,8 @@ final class Engine {
         if config.yieldToExistingCopy, Clipboard.changeCount != clipboardBaseline { return }
         fallbackQueue.async { [weak self] in
             guard let self, self.isCurrent(gen) else { return }
-            guard let native = self.nativeCopy(targetPID: pid, generation: gen),
+            guard let native = self.nativeCopy(
+                    targetPID: pid, generation: gen, restoreOnFailure: false),
                 native.count <= self.config.maxCharacters
             else { return }
             guard self.isCurrent(gen) else { return }
@@ -332,7 +334,13 @@ final class Engine {
     /// caller decide: on success the value is rewritten as plain text only, and
     /// on failure the caller falls back to the accessibility text it already
     /// holds. Either way the clipboard is restored if this damaged it.
-    private func nativeCopy(targetPID: pid_t, generation gen: Int) -> String? {
+    /// `restoreOnFailure` should be false when the caller already holds the
+    /// accessibility text: it will commit that immediately, so restoring the
+    /// previous clipboard first is a wasted write that briefly shows stale
+    /// content and adds a spurious clipboard-manager entry.
+    private func nativeCopy(
+        targetPID: pid_t, generation gen: Int, restoreOnFailure: Bool
+    ) -> String? {
         guard isSafeToSynthesizeCopy(targetPID: targetPID) else { return nil }
 
         let snapshot = Clipboard.snapshot()
@@ -383,10 +391,11 @@ final class Engine {
         guard changed else { return nil }
 
         guard let produced else {
-            // The copy damaged the clipboard without producing text. Put the
-            // previous contents back and report failure so the caller can use
-            // the accessibility text instead.
-            DispatchQueue.main.async { Clipboard.restore(snapshot) }
+            // The copy damaged the clipboard without producing text. Restore
+            // only if the caller has nothing else to write.
+            if restoreOnFailure {
+                DispatchQueue.main.async { Clipboard.restore(snapshot) }
+            }
             return nil
         }
         return produced
