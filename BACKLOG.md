@@ -136,7 +136,8 @@ password. Not a viable default experience.
 
 Ranked options:
 
-- [ ] **Homebrew formula (builds from source)** — the natural fit. One command,
+- [ ] **DECIDED (2026-07-25): Homebrew is the distribution route.**
+      **Homebrew formula (builds from source)** — the natural fit. One command,
       and it *preserves* the build-it-yourself property the README argues for.
       Needs only the **Command Line Tools**, not Xcode (verified: CLT ships
       `swift`, `swiftc`, `swift-build`), and Homebrew requires CLT anyway — so

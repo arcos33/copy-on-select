@@ -13,14 +13,18 @@ enum Clipboard {
     }
 
     /// Writes plain text. Returns false when the write was skipped.
+    ///
+    /// `force` rewrites even when the string already matches. That is needed
+    /// after an app's own copy: the text is identical, but the pasteboard also
+    /// carries the app's RTF/HTML flavors, and rewriting is what strips them.
     @discardableResult
-    static func write(_ text: String, concealed: Bool) -> Bool {
+    static func write(_ text: String, concealed: Bool, force: Bool = false) -> Bool {
         // Never clobber a good clipboard with nothing.
         guard !text.isEmpty, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return false
         }
         // Skip no-op writes so clipboard-manager history stays clean.
-        guard text != currentString else { return false }
+        guard force || text != currentString else { return false }
 
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()

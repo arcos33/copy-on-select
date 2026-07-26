@@ -13,6 +13,7 @@ func usage() {
         USAGE
           copy-on-select              run the daemon (normally started by launchd)
           copy-on-select --check      verify installation and permissions
+          copy-on-select --apps       list running apps and their bundle ids
           copy-on-select --version    print version
           copy-on-select --help       this message
 
@@ -37,6 +38,10 @@ if arguments.contains("--version") {
 
 if arguments.contains("--check") {
     exit(Doctor.run())
+}
+
+if arguments.contains("--apps") {
+    exit(Doctor.listApps())
 }
 
 // MARK: - Daemon

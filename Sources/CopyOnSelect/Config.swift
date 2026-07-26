@@ -18,9 +18,36 @@ struct Config: Codable {
     /// return megabytes and take seconds to marshal across the AX boundary.
     var maxCharacters: Int
 
-    /// Whether to fall back to synthesizing Cmd+C when a text element's
-    /// selection cannot be read over accessibility. The fallback is gated (see
-    /// Engine) but it is still the riskiest path; users can turn it off.
+    /// Once accessibility has confirmed a safe, non-empty selection, ask the
+    /// app to copy it itself rather than using the text accessibility returned.
+    ///
+    /// The app's own copy is higher fidelity: it preserves bullet markers,
+    /// numbering and line breaks, which accessibility flattens or drops
+    /// entirely. Measured 2026-07-25: Chrome and Linear return zero newlines,
+    /// and Notes returns no bullet characters at all, because list markers are
+    /// formatting rather than text.
+    ///
+    /// Accessibility still decides *whether* to copy and whether it is safe;
+    /// this only changes where the text comes from. If the copy produces
+    /// nothing — secure input mode, an app that rebinds Cmd+C — the
+    /// accessibility text is used instead, so this degrades rather than fails.
+    var preferNativeCopy: Bool
+
+    /// Apps to exclude from `preferNativeCopy`, forcing the accessibility text.
+    /// An escape hatch for anywhere the synthetic copy misbehaves.
+    var nativeCopyDisabledApps: [String]
+
+    /// Write only plain text, discarding the styling flavors an app's own copy
+    /// puts on the pasteboard. List structure survives — bullets and newlines
+    /// are characters in the plain-text flavor — while fonts and colors do not.
+    var plainTextOnly: Bool
+
+    /// Last resort only: synthesize Cmd+C when accessibility finds **no**
+    /// selection at all in a text element. Distinct from `preferNativeCopy`,
+    /// which fires when a selection *was* found.
+    ///
+    /// Off by default because firing blind is what caused an audible system
+    /// beep in apps where nothing was selected.
     var enableCopyFallback: Bool
 
     /// Minimum drag distance, in points, to count as a selection drag.
@@ -61,7 +88,10 @@ struct Config: Codable {
         ],
         settleMilliseconds: 180,
         maxCharacters: 1_000_000,
-        enableCopyFallback: true,
+        preferNativeCopy: true,
+        nativeCopyDisabledApps: [],
+        plainTextOnly: true,
+        enableCopyFallback: false,
         dragThreshold: 4.0,
         // Measured 2026-07-25 across Safari, Chrome and Linear: every real
         // selection was answered at depth 0 by the element under the cursor.
@@ -99,6 +129,14 @@ struct Config: Codable {
             ?? fallback.settleMilliseconds
         maxCharacters =
             try container.decodeIfPresent(Int.self, forKey: .maxCharacters) ?? fallback.maxCharacters
+        preferNativeCopy =
+            try container.decodeIfPresent(Bool.self, forKey: .preferNativeCopy)
+            ?? fallback.preferNativeCopy
+        nativeCopyDisabledApps =
+            try container.decodeIfPresent([String].self, forKey: .nativeCopyDisabledApps)
+            ?? fallback.nativeCopyDisabledApps
+        plainTextOnly =
+            try container.decodeIfPresent(Bool.self, forKey: .plainTextOnly) ?? fallback.plainTextOnly
         enableCopyFallback =
             try container.decodeIfPresent(Bool.self, forKey: .enableCopyFallback)
             ?? fallback.enableCopyFallback
@@ -115,12 +153,16 @@ struct Config: Codable {
 
     init(
         excludedBundleIDs: [String], settleMilliseconds: Int, maxCharacters: Int,
+        preferNativeCopy: Bool, nativeCopyDisabledApps: [String], plainTextOnly: Bool,
         enableCopyFallback: Bool, dragThreshold: Double, maxAncestorWalk: Int,
         markClipboardConcealed: Bool
     ) {
         self.excludedBundleIDs = excludedBundleIDs
         self.settleMilliseconds = settleMilliseconds
         self.maxCharacters = maxCharacters
+        self.preferNativeCopy = preferNativeCopy
+        self.nativeCopyDisabledApps = nativeCopyDisabledApps
+        self.plainTextOnly = plainTextOnly
         self.enableCopyFallback = enableCopyFallback
         self.dragThreshold = dragThreshold
         self.maxAncestorWalk = maxAncestorWalk

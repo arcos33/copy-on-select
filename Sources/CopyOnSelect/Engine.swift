@@ -119,8 +119,9 @@ final class Engine {
 
     private func schedule(at point: CGPoint) {
         pending?.cancel()
+        let gen = nextGeneration()
         let work = DispatchWorkItem { [weak self] in
-            self?.resolveSelection(at: point)
+            self?.resolveSelection(at: point, generation: gen)
         }
         pending = work
         queue.asyncAfter(
@@ -129,7 +130,27 @@ final class Engine {
 
     // MARK: - Selection resolution (on `queue`, never on the tap callback)
 
-    private func resolveSelection(at point: CGPoint) {
+    /// Bumped on every new gesture. A resolution that finds itself stale by the
+    /// time it finishes discards its result rather than writing an outdated
+    /// selection — the native-copy path can take a few hundred milliseconds,
+    /// which is long enough for the user to have moved on.
+    private let generationLock = NSLock()
+    private var generation = 0
+
+    private func nextGeneration() -> Int {
+        generationLock.lock()
+        defer { generationLock.unlock() }
+        generation += 1
+        return generation
+    }
+
+    private func isCurrent(_ value: Int) -> Bool {
+        generationLock.lock()
+        defer { generationLock.unlock() }
+        return value == generation
+    }
+
+    private func resolveSelection(at point: CGPoint, generation gen: Int) {
         // Rung 1: the element that was actually clicked. Starting here — rather
         // than from the focused element — is what makes the result attributable
         // to this gesture instead of to whatever is selected elsewhere.
@@ -153,31 +174,64 @@ final class Engine {
         switch AX.findSelection(
             from: clicked, maxDepth: config.maxAncestorWalk, maxCharacters: config.maxCharacters)
         {
-        case .text(let text):
-            commit(text)
-            return
         case .secure:
-            // A password field was on the path. Copy nothing, and do not fall
-            // back to synthesizing a keystroke.
+            // A password field was on the path. Copy nothing, and never
+            // synthesize a keystroke.
             return
+
         case .tooLarge:
-            // A selection exists, it is just bigger than the cap. Falling
-            // through to Cmd+C here would copy it anyway, via the destructive
-            // path, defeating the cap entirely.
+            // A selection exists but exceeds the cap. Falling through to a
+            // native copy would copy it anyway, defeating the cap.
             return
+
+        case .text(let axText):
+            // Accessibility has confirmed a safe, non-empty selection, and has
+            // given us a usable value. Everything past this point is about
+            // FIDELITY, not about whether to copy.
+            //
+            // The app's own copy preserves list markers, numbering and line
+            // breaks that accessibility flattens, so prefer it — but keep the
+            // accessibility text as a guaranteed fallback if the copy is
+            // blocked (secure input mode, an app that rebinds Cmd+C).
+            if shouldUseNativeCopy(pid: pid) {
+                if let native = nativeCopy(targetPID: pid),
+                    native.count <= config.maxCharacters
+                {
+                    guard isCurrent(gen) else { return }
+                    // Force the rewrite: the string already matches what the
+                    // app put on the pasteboard, and rewriting is what strips
+                    // its styling flavors.
+                    commit(native, force: config.plainTextOnly)
+                    return
+                }
+            }
+            guard isCurrent(gen) else { return }
+            commit(axText, force: false)
+            return
+
         case .none:
             break
         }
 
-        // Gated fallback: only for a narrow set of genuine text roles whose
-        // selection could not be read. Anything else — labels, rows, canvases,
-        // Finder items, title bars — drops here.
+        // Last resort, off by default: accessibility found no selection at all.
+        // Firing here is a guess, which is why it beeps in apps where nothing
+        // was actually selected.
         guard config.enableCopyFallback, AX.isFallbackRole(clicked) else { return }
-        guard isSafeToSynthesizeCopy(targetPID: pid) else { return }
-
         fallbackQueue.async { [weak self] in
-            self?.copyFallback(targetPID: pid)
+            guard let self, let native = self.nativeCopy(targetPID: pid) else { return }
+            guard self.isCurrent(gen) else { return }
+            self.commit(native, force: self.config.plainTextOnly)
         }
+    }
+
+    /// Whether this app's own copy should be preferred over the accessibility
+    /// text for the same selection.
+    private func shouldUseNativeCopy(pid: pid_t) -> Bool {
+        guard config.preferNativeCopy else { return false }
+        guard let bundleID = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier else {
+            return false
+        }
+        return !config.nativeCopyDisabledApps.contains(bundleID)
     }
 
     private func isExcluded(pid: pid_t) -> Bool {
@@ -207,21 +261,28 @@ final class Engine {
         return true
     }
 
-    private func commit(_ text: String) {
+    private func commit(_ text: String, force: Bool) {
         // No separate "freshness" bookkeeping: Clipboard.write already skips a
         // write whose content equals the current clipboard, which is the same
         // check without the false negatives a cached key would introduce.
         let concealed = config.markClipboardConcealed
         DispatchQueue.main.async {
-            Clipboard.write(text, concealed: concealed)
+            Clipboard.write(text, concealed: concealed, force: force)
         }
     }
 
     // MARK: - Cmd+C fallback
 
-    /// Synthesizes ⌘C, then restores the previous clipboard only if the copy
-    /// actually damaged it.
-    private func copyFallback(targetPID: pid_t) {
+    /// Asks the app to copy its own selection, and returns the resulting plain
+    /// text — or nil if the copy did not produce anything usable.
+    ///
+    /// Returning the text rather than leaving it on the pasteboard lets the
+    /// caller decide: on success the value is rewritten as plain text only, and
+    /// on failure the caller falls back to the accessibility text it already
+    /// holds. Either way the clipboard is restored if this damaged it.
+    private func nativeCopy(targetPID: pid_t) -> String? {
+        guard isSafeToSynthesizeCopy(targetPID: targetPID) else { return nil }
+
         let snapshot = Clipboard.snapshot()
 
         // Extending a selection means Shift is often physically held. Posting
@@ -229,11 +290,11 @@ final class Engine {
         // modifier state rather than tapping keyboard events.
         waitForModifiersToClear(timeout: 0.15)
 
-        // Re-check immediately before posting. The safety checks ran on the
-        // engine queue; during the modifier wait, secure input can switch on,
-        // focus can move to a password field, or another app can come forward —
-        // and the keystroke goes wherever focus is *now*.
-        guard isSafeToSynthesizeCopy(targetPID: targetPID) else { return }
+        // Re-check immediately before posting. The safety checks ran earlier;
+        // during the modifier wait, secure input can switch on, focus can move
+        // to a password field, or another app can come forward — and the
+        // keystroke goes wherever focus is *now*.
+        guard isSafeToSynthesizeCopy(targetPID: targetPID) else { return nil }
 
         postCommandC()
 
@@ -263,11 +324,16 @@ final class Engine {
         // would be destructive, not neutral — it bumps changeCount, flattens
         // promised flavors, adds a duplicate clipboard-manager entry, and can
         // orphan a password manager's pending auto-clear.
-        guard changed else { return }
+        guard changed else { return nil }
 
-        if produced == nil {
+        guard let produced else {
+            // The copy damaged the clipboard without producing text. Put the
+            // previous contents back and report failure so the caller can use
+            // the accessibility text instead.
             DispatchQueue.main.async { Clipboard.restore(snapshot) }
+            return nil
         }
+        return produced
     }
 
     private func waitForModifiersToClear(timeout: TimeInterval) {

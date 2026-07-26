@@ -25,6 +25,30 @@ enum Doctor {
         var severity: Severity = .advisory
     }
 
+    /// `copy-on-select --apps`
+    ///
+    /// Lists running apps with their bundle identifiers, so the exclusion and
+    /// native-copy lists in the config can be filled in without hunting through
+    /// Info.plist files or remembering the osascript incantation.
+    static func listApps() -> Int32 {
+        let apps = NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular }
+            .compactMap { app -> (String, String)? in
+                guard let id = app.bundleIdentifier else { return nil }
+                return (app.localizedName ?? id, id)
+            }
+            .sorted { $0.0.localizedCaseInsensitiveCompare($1.0) == .orderedAscending }
+
+        let width = apps.map(\.0.count).max() ?? 20
+        print("Running apps and their bundle identifiers:\n")
+        for (name, id) in apps {
+            print("  \(name.padding(toLength: width, withPad: " ", startingAt: 0))  \(id)")
+        }
+        print("\nUse these in \"excludedBundleIDs\" or \"nativeCopyDisabledApps\" in:")
+        print("  \(Config.fileURL.path)")
+        return 0
+    }
+
     static func run() -> Int32 {
         var checks: [Check] = []
 
