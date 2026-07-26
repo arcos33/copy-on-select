@@ -229,14 +229,16 @@ final class Engine {
             // copy-on-select, most likely. Its result is authoritative for its
             // own content; do not overwrite it. Our own just-landed write for a
             // previous gesture is not "something else".
-            if config.yieldToExistingCopy {
-                let current = Clipboard.changeCount
-                if current != clipboardBaseline, !isOwnWrite(current) { return }
+            let observedCount = Clipboard.changeCount
+            if config.yieldToExistingCopy,
+                observedCount != clipboardBaseline, !isOwnWrite(observedCount)
+            {
+                return
             }
 
             guard shouldUseNativeCopy(pid: pid) else {
                 guard isCurrent(gen) else { return }
-                commit(axText, force: false)
+                commit(axText, force: false, guardCount: observedCount)
                 return
             }
 
@@ -396,14 +398,27 @@ final class Engine {
         return count == lastOwnWriteCount
     }
 
-    private func commit(_ text: String, force: Bool) {
+    /// `guardCount`: the clipboard changeCount the caller last observed. The
+    /// write aborts if the clipboard has moved past it by the time the write
+    /// executes — unless the newer write was our own. This check runs on the
+    /// same queue as the write itself, closing the gap in which a user's
+    /// manual ⌘C (or any other copy) could land between our decision to write
+    /// and the write executing. The recorded failure: the user's rich manual
+    /// copy landed ~300ms before our flattened write and was clobbered, with
+    /// the earlier worker-queue yield check unable to see it.
+    private func commit(_ text: String, force: Bool, guardCount: Int? = nil) {
         // No separate "freshness" bookkeeping: Clipboard.write already skips a
         // write whose content equals the current clipboard, which is the same
         // check without the false negatives a cached key would introduce.
         let concealed = config.markClipboardConcealed
         DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if let guardCount {
+                let current = Clipboard.changeCount
+                if current != guardCount, !self.isOwnWrite(current) { return }
+            }
             if let count = Clipboard.write(text, concealed: concealed, force: force) {
-                self?.noteOwnWrite(count)
+                self.noteOwnWrite(count)
             }
         }
     }
