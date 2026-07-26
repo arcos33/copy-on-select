@@ -258,9 +258,46 @@ enum AX {
         AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue)
     }
 
+    // MARK: - Selection bounds
+
+    static func rect(fromAXValue value: CFTypeRef?) -> CGRect? {
+        guard let value, CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+        var r = CGRect.zero
+        guard AXValueGetValue(value as! AXValue, .cgRect, &r) else { return nil }
+        return r
+    }
+
+    /// Screen rectangle of a text range (top-left origin, same space as
+    /// CGEvent.location). Verified working against a live NSTextView.
+    static func bounds(of element: AXUIElement, range: CFRange) -> CGRect? {
+        var mutableRange = range
+        guard let rangeValue = AXValueCreate(.cfRange, &mutableRange) else { return nil }
+        var out: CFTypeRef?
+        guard
+            AXUIElementCopyParameterizedAttributeValue(
+                element, kAXBoundsForRangeParameterizedAttribute as CFString, rangeValue, &out)
+                == .success
+        else { return nil }
+        return rect(fromAXValue: out)
+    }
+
+    /// WebKit's equivalent for marker-based selections.
+    static func boundsViaMarkers(_ element: AXUIElement) -> CGRect? {
+        guard let markerRange = attribute(element, selectedTextMarkerRangeAttribute) else {
+            return nil
+        }
+        var out: CFTypeRef?
+        guard
+            AXUIElementCopyParameterizedAttributeValue(
+                element, "AXBoundsForTextMarkerRange" as CFString, markerRange, &out) == .success
+        else { return nil }
+        return rect(fromAXValue: out)
+    }
+
     enum SelectionOutcome {
-        /// A selection was read.
-        case text(String)
+        /// A selection was read, with its on-screen bounds when the app could
+        /// report them (nil = unknown, which callers treat as fail-open).
+        case text(String, CGRect?)
         /// A password field was encountered; abort everything, copy nothing.
         case secure
         /// A selection exists but exceeds the size cap. Distinct from `.none`
@@ -321,21 +358,26 @@ enum AX {
 
             if worthAsking {
                 if let text = selectedText(node), !text.isEmpty {
-                    return text.count <= maxCharacters ? .text(text) : .tooLarge
+                    guard text.count <= maxCharacters else { return .tooLarge }
+                    let selectionBounds =
+                        selectedRange(node).flatMap { bounds(of: node, range: $0) }
+                        ?? boundsViaMarkers(node)
+                    return .text(text, selectionBounds)
                 }
 
                 // Only fetch the range once the cheap attribute has failed.
                 if let range = selectedRange(node), range.length > 0 {
                     if range.length > maxCharacters { return .tooLarge }
                     if let text = string(node, forRange: range), !text.isEmpty {
-                        return .text(text)
+                        return .text(text, bounds(of: node, range: range))
                     }
                 }
 
                 // WebKit answers neither of the above; markers are its only
                 // route.
                 if let text = selectedTextViaMarkers(node) {
-                    return text.count <= maxCharacters ? .text(text) : .tooLarge
+                    guard text.count <= maxCharacters else { return .tooLarge }
+                    return .text(text, boundsViaMarkers(node))
                 }
             }
 

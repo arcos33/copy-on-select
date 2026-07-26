@@ -96,7 +96,7 @@ final class Engine {
                 clickCount: clickCount, shiftHeld: shiftHeld)
             else { return }
 
-            schedule(at: downLocation)
+            schedule(down: downLocation, up: event.location)
 
         default:
             break
@@ -117,7 +117,19 @@ final class Engine {
         return dragged || clickCount >= 2 || shiftHeld
     }
 
-    private func schedule(at point: CGPoint) {
+    /// Whether the gesture plausibly interacted with the selection's on-screen
+    /// rectangle. Endpoint-based on purpose: a genuine selection gesture has
+    /// its endpoints at or inside the selection, while a drag that merely
+    /// CROSSES stale text (dragging a card over a paragraph) has both
+    /// endpoints outside and is rejected - stricter than segment intersection.
+    private func gestureTouches(_ bounds: CGRect, down: CGPoint, up: CGPoint) -> Bool {
+        // Padding absorbs the few points of slop between where the click
+        // lands and where the app draws the selection.
+        let padded = bounds.insetBy(dx: -12, dy: -12)
+        return padded.contains(down) || padded.contains(up)
+    }
+
+    private func schedule(down: CGPoint, up: CGPoint) {
         pending?.cancel()
         let gen = nextGeneration()
 
@@ -138,7 +150,7 @@ final class Engine {
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.resolveSelection(
-                at: point, generation: gen, clipboardBaseline: self.clipboardBaseline)
+                down: down, up: up, generation: gen, clipboardBaseline: self.clipboardBaseline)
         }
         pending = work
         queue.asyncAfter(
@@ -170,11 +182,13 @@ final class Engine {
         return value == generation
     }
 
-    private func resolveSelection(at point: CGPoint, generation gen: Int, clipboardBaseline: Int) {
+    private func resolveSelection(
+        down: CGPoint, up: CGPoint, generation gen: Int, clipboardBaseline: Int
+    ) {
         // Rung 1: the element that was actually clicked. Starting here — rather
         // than from the focused element — is what makes the result attributable
         // to this gesture instead of to whatever is selected elsewhere.
-        guard let clicked = AX.element(at: point) else {
+        guard let clicked = AX.element(at: down) else {
             // Nothing under the cursor exposes accessibility, so we cannot tell
             // whether a selection happened. Guessing here is what produces
             // wrong-clipboard bugs.
@@ -204,7 +218,21 @@ final class Engine {
             // native copy would copy it anyway, defeating the cap.
             return
 
-        case .text(let axText):
+        case .text(let axText, let selectionBounds):
+            // The gesture must touch the selection. A drag that selects text
+            // traces across it, a double-click lands inside it, a shift-click
+            // ends at its boundary - but a drag on a card, splitter or
+            // scrollbar in a document that still holds an OLD selection does
+            // not go anywhere near that selection's rectangle. This geometric
+            // test is what stops a non-selection drag from re-copying stale
+            // text. Fail-open: apps that cannot report bounds behave as
+            // before.
+            if config.requireGestureNearSelection,
+                let selectionBounds, !selectionBounds.isEmpty,
+                !gestureTouches(selectionBounds, down: down, up: up)
+            {
+                return
+            }
             // Accessibility has confirmed a safe, non-empty selection, and has
             // given us a usable value. Everything past this point is about
             // FIDELITY, not about whether to copy.

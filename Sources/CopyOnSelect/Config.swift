@@ -80,6 +80,12 @@ struct Config: Codable {
     /// beep in apps where nothing was selected.
     var enableCopyFallback: Bool
 
+    /// Require the gesture to touch the selection's on-screen rectangle
+    /// before copying. This is what stops a drag on a card, splitter or
+    /// scrollbar from re-copying a document's old selection. Fail-open: apps
+    /// that cannot report selection bounds behave as if this were off.
+    var requireGestureNearSelection: Bool
+
     /// Minimum drag distance, in points, to count as a selection drag.
     var dragThreshold: Double
 
@@ -130,6 +136,7 @@ struct Config: Codable {
         yieldToExistingCopy: true,
         plainTextOnly: false,
         enableCopyFallback: false,
+        requireGestureNearSelection: true,
         dragThreshold: 4.0,
         // Measured 2026-07-25 across Safari, Chrome and Linear: every real
         // selection was answered at depth 0 by the element under the cursor.
@@ -184,6 +191,9 @@ struct Config: Codable {
         enableCopyFallback =
             try container.decodeIfPresent(Bool.self, forKey: .enableCopyFallback)
             ?? fallback.enableCopyFallback
+        requireGestureNearSelection =
+            try container.decodeIfPresent(Bool.self, forKey: .requireGestureNearSelection)
+            ?? fallback.requireGestureNearSelection
         dragThreshold =
             try container.decodeIfPresent(Double.self, forKey: .dragThreshold)
             ?? fallback.dragThreshold
@@ -199,7 +209,8 @@ struct Config: Codable {
         excludedBundleIDs: [String], settleMilliseconds: Int, maxCharacters: Int,
         preferNativeCopyApps: [String], preferNativeCopyEverywhere: Bool,
         nativeCopyDisabledApps: [String], yieldToExistingCopy: Bool, plainTextOnly: Bool,
-        enableCopyFallback: Bool, dragThreshold: Double, maxAncestorWalk: Int,
+        enableCopyFallback: Bool, requireGestureNearSelection: Bool,
+        dragThreshold: Double, maxAncestorWalk: Int,
         markClipboardConcealed: Bool
     ) {
         self.excludedBundleIDs = excludedBundleIDs
@@ -211,6 +222,7 @@ struct Config: Codable {
         self.yieldToExistingCopy = yieldToExistingCopy
         self.plainTextOnly = plainTextOnly
         self.enableCopyFallback = enableCopyFallback
+        self.requireGestureNearSelection = requireGestureNearSelection
         self.dragThreshold = dragThreshold
         self.maxAncestorWalk = maxAncestorWalk
         self.markClipboardConcealed = markClipboardConcealed

@@ -218,6 +218,7 @@ default one).
 | `yieldToExistingCopy` | `true` | don't overwrite a copy something else already made |
 | `plainTextOnly` | `false` | drop styling from a native copy; structure survives either way |
 | `enableCopyFallback` | `false` | last resort: ⌘C when accessibility finds *no* selection |
+| `requireGestureNearSelection` | `true` | gesture must touch the selection's screen rect (blocks stale re-copies) |
 | `dragThreshold` | `4.0` | points of movement that count as a drag |
 | `maxAncestorWalk` | `5` | how far up the AX tree to look for the selection |
 | `markClipboardConcealed` | `false` | hide writes from clipboard managers and sync |
