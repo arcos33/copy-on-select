@@ -18,26 +18,32 @@ enum Clipboard {
         NSPasteboard.general.changeCount
     }
 
-    /// Writes plain text. Returns false when the write was skipped.
+    /// Writes plain text. Returns the resulting changeCount, or nil when the
+    /// write was skipped.
+    ///
+    /// Returning the count (read immediately after the write, same function)
+    /// keeps the window in which a third party could interleave — and be
+    /// mistaken for our own write — as small as possible.
     ///
     /// `force` rewrites even when the string already matches. That is needed
     /// after an app's own copy: the text is identical, but the pasteboard also
     /// carries the app's RTF/HTML flavors, and rewriting is what strips them.
     @discardableResult
-    static func write(_ text: String, concealed: Bool, force: Bool = false) -> Bool {
+    static func write(_ text: String, concealed: Bool, force: Bool = false) -> Int? {
         // Never clobber a good clipboard with nothing.
         guard !text.isEmpty, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return false
+            return nil
         }
         // Skip no-op writes so clipboard-manager history stays clean.
-        guard force || text != currentString else { return false }
+        guard force || text != currentString else { return nil }
 
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         if concealed {
             pasteboard.setData(Data(), forType: concealedType)
         }
-        return pasteboard.setString(text, forType: .string)
+        guard pasteboard.setString(text, forType: .string) else { return nil }
+        return pasteboard.changeCount
     }
 
     /// A full copy of the pasteboard, across all flavors, so the Cmd+C fallback

@@ -91,30 +91,17 @@ final class Engine {
             let clickCount = event.getIntegerValueField(.mouseEventClickState)
             let shiftHeld = event.flags.contains(.maskShift)
 
-            guard isSelectionCandidate(
-                down: downLocation, up: event.location,
-                clickCount: clickCount, shiftHeld: shiftHeld)
-            else { return }
+            let dx = event.location.x - downLocation.x
+            let dy = event.location.y - downLocation.y
+            let dragged = (dx * dx + dy * dy).squareRoot() > config.dragThreshold
 
-            schedule(down: downLocation, up: event.location)
+            guard dragged || clickCount >= 2 || shiftHeld else { return }
+
+            schedule(down: downLocation, up: event.location, wasDrag: dragged)
 
         default:
             break
         }
-    }
-
-    /// A gesture is a candidate when it plausibly changed a text selection.
-    ///
-    /// Shift-click must be handled explicitly: it extends a selection without
-    /// moving the mouse, so the drag test alone misses it and "extend the
-    /// selection" appears broken.
-    private func isSelectionCandidate(
-        down: CGPoint, up: CGPoint, clickCount: Int64, shiftHeld: Bool
-    ) -> Bool {
-        let dx = up.x - down.x
-        let dy = up.y - down.y
-        let dragged = (dx * dx + dy * dy).squareRoot() > config.dragThreshold
-        return dragged || clickCount >= 2 || shiftHeld
     }
 
     /// Whether the gesture plausibly interacted with the selection's on-screen
@@ -129,7 +116,7 @@ final class Engine {
         return padded.contains(down) || padded.contains(up)
     }
 
-    private func schedule(down: CGPoint, up: CGPoint) {
+    private func schedule(down: CGPoint, up: CGPoint, wasDrag: Bool) {
         pending?.cancel()
         let gen = nextGeneration()
 
@@ -150,7 +137,8 @@ final class Engine {
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.resolveSelection(
-                down: down, up: up, generation: gen, clipboardBaseline: self.clipboardBaseline)
+                down: down, up: up, wasDrag: wasDrag, generation: gen,
+                clipboardBaseline: self.clipboardBaseline)
         }
         pending = work
         queue.asyncAfter(
@@ -183,7 +171,7 @@ final class Engine {
     }
 
     private func resolveSelection(
-        down: CGPoint, up: CGPoint, generation gen: Int, clipboardBaseline: Int
+        down: CGPoint, up: CGPoint, wasDrag: Bool, generation gen: Int, clipboardBaseline: Int
     ) {
         // Rung 1: the element that was actually clicked. Starting here — rather
         // than from the focused element — is what makes the result attributable
@@ -227,7 +215,7 @@ final class Engine {
             // test is what stops a non-selection drag from re-copying stale
             // text. Fail-open: apps that cannot report bounds behave as
             // before.
-            if config.requireGestureNearSelection,
+            if config.requireGestureNearSelection, wasDrag,
                 let selectionBounds, !selectionBounds.isEmpty,
                 !gestureTouches(selectionBounds, down: down, up: up)
             {
@@ -295,8 +283,11 @@ final class Engine {
         }
         fallbackQueue.async { [weak self] in
             guard let self, self.isCurrent(gen) else { return }
+            // restoreOnFailure: this path has no accessibility text to fall
+            // back to, so a copy that damaged the clipboard without producing
+            // text must put the previous contents back.
             guard let native = self.nativeCopy(
-                    targetPID: pid, generation: gen, restoreOnFailure: false),
+                    targetPID: pid, generation: gen, restoreOnFailure: true),
                 native.count <= self.config.maxCharacters
             else { return }
             guard self.isCurrent(gen) else { return }
@@ -411,8 +402,8 @@ final class Engine {
         // check without the false negatives a cached key would introduce.
         let concealed = config.markClipboardConcealed
         DispatchQueue.main.async { [weak self] in
-            if Clipboard.write(text, concealed: concealed, force: force) {
-                self?.noteOwnWrite(Clipboard.changeCount)
+            if let count = Clipboard.write(text, concealed: concealed, force: force) {
+                self?.noteOwnWrite(count)
             }
         }
     }
@@ -481,6 +472,13 @@ final class Engine {
         // promised flavors, adds a duplicate clipboard-manager entry, and can
         // orphan a password manager's pending auto-clear.
         guard changed else { return nil }
+
+        // The app's write was induced by OUR keystroke, so record it as our
+        // own — unconditionally, before any generation check. A superseded
+        // gesture that skips its commit must not leave this write looking
+        // foreign, or the next gesture's yield check wrongly backs off and the
+        // clipboard keeps the older selection.
+        noteOwnWrite(NSPasteboard.general.changeCount)
 
         guard let produced else {
             // The copy damaged the clipboard without producing text. Restore

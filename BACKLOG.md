@@ -110,6 +110,35 @@ an embedded TUI, multi-pane focus. Settled state:
 - **Claude Code TUI pane: handles its own copying** (OSC 52); the yield check
   defers to it.
 
+## From the second Fable review (2026-07-25) — accepted risks, not yet fixed
+
+Bugs 1–4 of that review are fixed (own-write bookkeeping unconditional after a
+⌘C-induced write; B1 scoped to drags because clicks get clamped by text views;
+own-write count read inside Clipboard.write to shrink the misattribution
+window; last-resort path restores again). Still open, ranked:
+
+- [ ] **Baseline timing**: the clipboard baseline block can run late if the
+      serial queue is stuck in a slow AX resolution, absorbing a foreign copy
+      into the baseline → yield passes → we overwrite a third party's write.
+      Guaranteed order, unguaranteed timing. Fix: capture via a dedicated queue
+      or timestamp the baseline.
+- [ ] **`markClipboardConcealed` silently ineffective on the native path**:
+      with everywhere-native + plainTextOnly=false, commit is usually an
+      equal-content skip, so the concealed marker never lands. If the flag is
+      on, force the rewrite.
+- [ ] **Correspondence false-rejects** → silent downgrade to flattened AX text:
+      soft hyphens (U+00AD), ligatures, and screen-reader-only spans present in
+      AX text but absent from the app's plain copy; long numbered lists with
+      short items can blow the slack (≈2 digits/item vs 10%). Consider
+      stripping soft hyphens + digits-adjacent-to-markers in normalization.
+- [ ] **Slack admits ~20-char injections** — a page's copy handler can append a
+      short string and pass. Disclosed in README as "same mechanism as manual
+      ⌘C"; tighten to exact-subsequence-only in web contexts if it ever bites.
+- [ ] **B1 vs momentum scroll**: bounds are fetched ~180ms after the gesture;
+      a scroll in between moves the rect → rare false drop (and, inverted,
+      a rare false pass). Live with it; revisit with AXObserver.
+- [ ] `(` is kept while `)` is stripped in the normalization marker set.
+
 ## Known limitations carried over from review
 
 Consciously accepted for now; revisit if they bite.
