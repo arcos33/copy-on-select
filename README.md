@@ -53,6 +53,13 @@ Verify any time:
 copy-on-select --check
 ```
 
+If the menu bar icon shows ⚠ and nothing copies, see
+[`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) — that is an Accessibility-grant
+problem, and it has a known recovery recipe.
+
+**Do not re-sign this app with another certificate.** macOS pins the
+Accessibility grant to the code signature, so any re-sign silently revokes it.
+
 ## Why this exists, and why it is built this way
 
 I got the habit from Claude Code's TUI, which copies text as soon as you select

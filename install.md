@@ -172,7 +172,15 @@ codesign --verify --strict "$APP" && echo "bundle signature valid"
 
 ---
 
-## 5. Do NOT sign with an Apple Developer ID unless you also notarize
+## 5. Signing warnings — read before touching the signature again
+
+**Never re-sign this app with a different certificate.** macOS pins the
+Accessibility grant to the code signature, so any re-sign silently revokes it,
+and repeated identity changes at one path poison macOS's permission records
+(recovery then needs a fresh install path — see `TROUBLESHOOTING.md`). Every
+rebuild must use the same `copy-on-select-local` identity from step 3.
+
+### Do NOT sign with an Apple Developer ID unless you also notarize
 
 If your user has an Apple Developer ID certificate and suggests using it instead
 of the self-signed one: **warn them**. A Developer ID signature *without*
