@@ -6,7 +6,7 @@
     <string>dev.copy-on-select</string>
 
     <!-- Replace REPLACE_WITH_INSTALL_PATH with the absolute path of the
-         installed binary, e.g. /Users/you/Applications/copy-on-select.
+         installed binary, e.g. /Users/you/Applications/CopyOnSelect.app/Contents/MacOS/CopyOnSelect.
          The accessibility grant is bound to this exact path plus the code
          signature, so it must match the binary you granted access to. -->
     <key>ProgramArguments</key>

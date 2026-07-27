@@ -6,14 +6,14 @@ Work through the sections in order. Each one ends with a **Verify** block. **If 
 verification fails, stop and show your user the output instead of improvising.**
 
 Two steps cannot be done by you — creating a code-signing certificate (step 3)
-and granting Accessibility (step 5) are both GUI actions. For those, stop, give
+and granting Accessibility (step 6) are both GUI actions. For those, stop, give
 your user the exact instructions, and wait for them to confirm before continuing.
 
 **Complete list of what this installs:**
 
 | Path | What |
 |---|---|
-| `~/Applications/copy-on-select` | the executable |
+| `~/Applications/CopyOnSelect.app` | the app (a standard macOS bundle) |
 | `~/Library/LaunchAgents/dev.copy-on-select.plist` | starts it at login |
 | `~/Library/Application Support/copy-on-select/config.json` | config (only if the user edits defaults) |
 | login keychain | a self-signed code-signing certificate named `copy-on-select-local` |
@@ -108,53 +108,88 @@ in order, and tell them exactly what to enter.
 >
 > Tell me when it is created.
 
-Wait for confirmation. Then sign — **a keychain dialog may appear asking whether
-`codesign` may use the key. "Always Allow" stops it reappearing on every
-rebuild; plain "Allow" also works, it just prompts again next time.** Either is
-fine, and it can be changed later in Keychain Access (Keys → `copy-on-select-local`
-→ ⌘I → Access Control).
+Wait for confirmation.
+
+**Verify**
 
 ```sh
-codesign --force --sign copy-on-select-local \
-  --identifier dev.copy-on-select \
-  .build/release/copy-on-select
+security find-certificate -c copy-on-select-local >/dev/null 2>&1 && echo "certificate exists"
+```
+
+---
+
+## 4. Assemble the app bundle and sign it
+
+Install as a real `.app` bundle, **not** a bare executable. This matters:
+macOS's permission system (TCC) misbehaves around bare executables — the
+Accessibility **+** file picker refuses to show them, `tccutil` cannot reset
+them (no bundle identifier), and their permission records are fragile when the
+signing identity ever changes. A bundle is the format macOS expects from
+anything requesting Accessibility.
+
+The Accessibility grant is also bound to the **path**, so assemble at the final
+location before granting. Never grant permission to a build-directory copy.
+
+```sh
+APP="$HOME/Applications/CopyOnSelect.app"
+mkdir -p "$APP/Contents/MacOS"
+cp .build/release/copy-on-select "$APP/Contents/MacOS/CopyOnSelect"
+cat > "$APP/Contents/Info.plist" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key><string>dev.copy-on-select</string>
+    <key>CFBundleName</key><string>CopyOnSelect</string>
+    <key>CFBundleExecutable</key><string>CopyOnSelect</string>
+    <key>CFBundleShortVersionString</key><string>0.1.0</string>
+    <key>CFBundleVersion</key><string>1</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>LSUIElement</key><true/>
+    <key>LSMinimumSystemVersion</key><string>13.0</string>
+</dict>
+</plist>
+EOF
+```
+
+Now sign the bundle — **a keychain dialog may appear asking whether `codesign`
+may use the key. "Always Allow" stops it reappearing on every rebuild; plain
+"Allow" also works, it just prompts again next time.**
+
+```sh
+codesign --force --deep --sign copy-on-select-local "$HOME/Applications/CopyOnSelect.app"
 ```
 
 **Verify**
 
 ```sh
-codesign -dv .build/release/copy-on-select 2>&1 | grep -q "Signature=adhoc" \
+APP="$HOME/Applications/CopyOnSelect.app"
+codesign -dv "$APP" 2>&1 | grep -q "Signature=adhoc" \
   && echo "FAIL: still ad-hoc" \
   || echo "signed with a stable identity"
+codesign --verify --strict "$APP" && echo "bundle signature valid"
 ```
 
 ---
 
-## 4. Install to its final location
+## 5. Do NOT sign with an Apple Developer ID unless you also notarize
 
-The Accessibility grant is bound to the binary's **path as well as its
-signature**, so it must be installed before it is granted. Never grant
-permission to the build-directory copy.
-
-```sh
-mkdir -p ~/Applications
-cp .build/release/copy-on-select ~/Applications/copy-on-select
-```
-
-**Verify**
-
-```sh
-test -x ~/Applications/copy-on-select && echo "installed"
-```
+If your user has an Apple Developer ID certificate and suggests using it instead
+of the self-signed one: **warn them**. A Developer ID signature *without*
+notarization is actively rejected by Gatekeeper (`spctl` reports
+"Unnotarized Developer ID") and macOS will refuse to honour Accessibility for
+the binary — a state strictly worse than self-signed. Developer ID is only an
+upgrade as a pair: sign **and** notarize. The self-signed certificate is the
+right default for a personal build.
 
 ---
 
-## 5. Grant Accessibility — USER ACTION REQUIRED
+## 6. Grant Accessibility — USER ACTION REQUIRED
 
 Start it once so macOS registers it and shows the permission prompt:
 
 ```sh
-~/Applications/copy-on-select &
+open ~/Applications/CopyOnSelect.app
 ```
 
 Then **stop** and give your user these instructions verbatim:
@@ -162,8 +197,9 @@ Then **stop** and give your user these instructions verbatim:
 > A dialog should have appeared asking for Accessibility access.
 >
 > Open **System Settings → Privacy & Security → Accessibility**, find
-> **copy-on-select**, and turn it **on**. If it is not listed, click **+** and
-> select `~/Applications/copy-on-select`.
+> **CopyOnSelect**, and turn it **on**. If it is not listed, click **+**,
+> press ⌘⇧G in the picker, enter `~/Applications`, and select
+> **CopyOnSelect.app**.
 >
 > Tell me when it is enabled.
 
@@ -173,27 +209,25 @@ your user does not need to restart it.
 **Verify**
 
 ```sh
-~/Applications/copy-on-select --check
+~/Applications/CopyOnSelect.app/Contents/MacOS/CopyOnSelect --check
 ```
 
-Run the check against `~/Applications/copy-on-select`, **not** the build
-directory — they have different identities and will report different answers.
 Note that the check reports the permission of the *responsible* process, so if
 you run it from a terminal that itself holds Accessibility the result can be
-misleading; the authoritative signal is the app working in step 8.
+misleading; the authoritative signal is the app working in step 9.
 
 ---
 
-## 6. Start at login
+## 7. Start at login
 
-Stop the copy you started by hand in step 5 first, or you will end up with two
+Stop the copy you started by hand in step 6 first, or you will end up with two
 instances — two menu bar icons, two event taps, two processes racing to write
 the clipboard.
 
 ```sh
-pkill -f "$HOME/Applications/copy-on-select" 2>/dev/null
+pkill -f "CopyOnSelect.app/Contents/MacOS/CopyOnSelect" 2>/dev/null
 
-sed "s|REPLACE_WITH_INSTALL_PATH|$HOME/Applications/copy-on-select|" \
+sed "s|REPLACE_WITH_INSTALL_PATH|$HOME/Applications/CopyOnSelect.app/Contents/MacOS/CopyOnSelect|" \
   examples/dev.copy-on-select.plist > ~/Library/LaunchAgents/dev.copy-on-select.plist
 launchctl unload ~/Library/LaunchAgents/dev.copy-on-select.plist 2>/dev/null
 launchctl load ~/Library/LaunchAgents/dev.copy-on-select.plist
@@ -203,7 +237,7 @@ launchctl load ~/Library/LaunchAgents/dev.copy-on-select.plist
 
 ```sh
 launchctl list | grep dev.copy-on-select && echo "loaded"
-grep -q "$HOME/Applications/copy-on-select" ~/Library/LaunchAgents/dev.copy-on-select.plist \
+grep -q "CopyOnSelect.app/Contents/MacOS/CopyOnSelect" ~/Library/LaunchAgents/dev.copy-on-select.plist \
   && echo "path substituted correctly"
 ```
 
@@ -212,7 +246,7 @@ will never start.
 
 ---
 
-## 7. Exclusions (optional)
+## 8. Exclusions (optional)
 
 Defaults already exclude Finder plus common terminals and editors — apps that
 either already copy on selection or where a drag is not a text selection. To
@@ -234,12 +268,12 @@ osascript -e 'id of app "Slack"'
 **Verify**
 
 ```sh
-~/Applications/copy-on-select --check | grep "Config"
+~/Applications/CopyOnSelect.app/Contents/MacOS/CopyOnSelect --check | grep "Config"
 ```
 
 ---
 
-## 8. End-to-end test
+## 9. End-to-end test
 
 This one needs your user, because only a human can make a selection.
 
@@ -267,12 +301,12 @@ land on the clipboard).
 
 ---
 
-## 9. Tell your user
+## 10. Tell your user
 
 Summarise for them:
 
 - Selecting text with the mouse now copies it, in every app except the excluded
-  ones (Finder, terminals, editors — see step 7).
+  ones (Finder, terminals, editors — see step 8).
 - It starts automatically at login.
 - The menu bar icon `⧉` has **Pause**, **Reveal Config…**, and **Quit**. A `⚠`
   icon means Accessibility was revoked or the event tap died.
@@ -295,8 +329,8 @@ is never left pointing at a missing executable.
 ```sh
 launchctl unload ~/Library/LaunchAgents/dev.copy-on-select.plist 2>/dev/null
 rm -f ~/Library/LaunchAgents/dev.copy-on-select.plist
-pkill -f "$HOME/Applications/copy-on-select" 2>/dev/null
-rm -f ~/Applications/copy-on-select
+pkill -f "CopyOnSelect.app/Contents/MacOS/CopyOnSelect" 2>/dev/null
+rm -rf ~/Applications/CopyOnSelect.app
 rm -rf ~/Library/Application\ Support/copy-on-select
 ```
 
@@ -304,11 +338,11 @@ rm -rf ~/Library/Application\ Support/copy-on-select
 
 ```sh
 launchctl list | grep -q dev.copy-on-select && echo "FAIL: still loaded" || echo "unloaded"
-test -e ~/Applications/copy-on-select && echo "FAIL: binary remains" || echo "removed"
+test -e ~/Applications/CopyOnSelect.app && echo "FAIL: app remains" || echo "removed"
 ```
 
 Then tell your user to remove the leftover entry manually — you cannot:
 
 > Open **System Settings → Privacy & Security → Accessibility** and remove
-> **copy-on-select** from the list. Optionally delete the
+> **CopyOnSelect** from the list. Optionally delete the
 > `copy-on-select-local` certificate from Keychain Access.

@@ -131,6 +131,26 @@ window; last-resort path restores again). Still open, ranked:
   arguably an app privacy-minded users would exclude anyway.
 - **Cursor Markdown source editor** — see the Cursor section above.
 
+## Install format: .app bundle (decided 2026-07-27, after a TCC incident)
+
+The bare-executable install format caused a real failure: after the signing
+identity changed at a fixed path (self-signed -> Developer ID -> self-signed),
+the stale TCC record shadowed every new Accessibility grant, the Settings "+"
+picker could not even show the bare binary, and `tccutil` could not reset it
+(no bundle identifier). Escape was a **fresh path + a real `.app` bundle**,
+which is now the documented install format everywhere (install.md, Homebrew
+formula revision 1). Same binary, same certificate — only the packaging shape
+changed.
+
+Hard-won corollary, now also a warning in install.md: **a Developer ID
+signature without notarization is actively rejected by Gatekeeper** ("
+Unnotarized Developer ID") and breaks Accessibility — strictly worse than
+self-signed. Developer ID only helps as a signed+notarized pair. Eugene has a
+Developer ID cert (his own company); notarization remains a deliberate,
+separate future step that would also enable prebuilt releases/bottles — noting
+that notarized binaries visibly carry the company name and Team ID, which the
+current build-from-source model never exposes.
+
 ## Known limitations carried over from review
 
 Consciously accepted for now; revisit if they bite.
