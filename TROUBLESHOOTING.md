@@ -1,9 +1,19 @@
 # Troubleshooting
 
+Any app that copies on selection needs macOS Accessibility, and macOS ties that
+permission to the app's **code signature and install path**. Change either and
+the grant is silently revoked. That is the one failure mode worth knowing about
+here — everything below is about recognising it and fixing it quickly.
+
+The common way to meet it is an upgrade: rebuilding produces a new binary
+identity, so macOS drops the grant and the app goes quiet until you re-enable
+it. Usually that is a single checkbox.
+
 ## The menu bar icon is ⚠ and nothing copies
 
 ⚠ means one thing: **the app has no Accessibility trust** (or its event tap
-died). It is almost always a *permission* problem, not a code problem.
+died). It is a *permission* problem, not a code problem — the app is telling
+you it cannot see anything.
 
 ### First, the 30-second checks
 
@@ -43,10 +53,16 @@ Things that have broken it in practice:
 
 ---
 
-## The recovery recipe (has worked twice; do this instead of rebooting)
+## If a normal re-grant does not take: the recovery recipe
 
-A reboot is **not** required and was twice the wrong instinct. TCC records are
-keyed by path, so a path macOS has never seen gets a clean record.
+Almost always, re-enabling the checkbox and restarting the process is enough.
+This section is for the rarer case where the grant refuses to stick — which
+happens when one install path has accumulated several different signing
+identities, leaving stale permission records that shadow the new grant.
+
+A reboot is **not** required (it was twice the wrong instinct when we hit this).
+TCC records are keyed by path, so a path macOS has never seen gets a clean
+record.
 
 ```sh
 # 1. Stop everything
