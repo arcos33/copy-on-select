@@ -39,9 +39,15 @@ non-string clipboard preserved; launchd start on its own grant.
 
 **Still unverified — ranked:**
 
-- [ ] **Password fields** (native, Safari, Chrome) — deliberately and
-      carefully, with a fake password. The one failure that would end the
-      project's credibility, and it has never been explicitly tested.
+- [x] **Password fields — behaviourally verified 2026-07-26** (Safari and
+      Chrome, tested by Eugene with deliberate selections: nothing reached the
+      clipboard). Honest caveats, accepted to save time: the *mechanism* is
+      unconfirmed — the protection could be our explicit `AXSecureTextField`
+      check firing, or the field simply exposing no selection over
+      accessibility (protection by accident, which a browser update could
+      change silently). Native `NSSecureTextField` fields were not tested.
+      If this is ever revisited: probe a password field for whether a
+      selection is exposed at all and whether the secure role is detected.
 - [ ] tmux/vim with mouse reporting; title-bar double-click; text drag-and-drop
       within a document.
 - [ ] The **blind last-resort path** (`enableCopyFallback`, off by default) —
