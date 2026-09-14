@@ -2,6 +2,8 @@
 
 Select text anywhere on macOS and it is on your clipboard. That is the whole app.
 
+A small, temporary **Copied** confirmation appears after each successful copy.
+
 You build it yourself from source you can read. It contains no networking code,
 execs no subprocesses (no `Process`, no `posix_spawn`, no `NSAppleScript`), and
 writes nothing to disk except the config file you ask it to create.
@@ -46,6 +48,11 @@ granting Accessibility are both GUI actions. The agent will stop and tell you.
 
 **Manual install** is in [`install.md`](install.md) as well — the same steps,
 written so a person or an agent can follow them.
+
+## Packaged alternative
+
+[Pluks](https://pluks.app/) provides the same select-text-to-copy behavior as a
+ready-to-install app.
 
 Verify any time:
 

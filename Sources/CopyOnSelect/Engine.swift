@@ -426,11 +426,21 @@ final class Engine {
                 if isRich,
                     Self.normalizeForComparison(existing) == Self.normalizeForComparison(text)
                 {
+                    // The target app already performed the equivalent native
+                    // copy. It is still a successful automatic copy, so give
+                    // the same confirmation without rewriting its rich data.
+                    CopyToast.shared.show()
                     return
                 }
             }
             if let count = Clipboard.write(text, concealed: concealed, force: force) {
                 self.noteOwnWrite(count)
+                CopyToast.shared.show()
+            } else if Clipboard.currentString == text {
+                // A matching plain-text item makes the write a deliberate
+                // no-op. The selection was nevertheless confirmed, and the
+                // user should get the same feedback as for a fresh write.
+                CopyToast.shared.show()
             }
         }
     }
