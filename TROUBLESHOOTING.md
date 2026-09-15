@@ -53,6 +53,55 @@ Things that have broken it in practice:
 
 ---
 
+## Icon looks healthy, `--check` says granted, but nothing ever copies
+
+Seen 2026-09-15, right after a same-day rebuild (the toast-notification change).
+The menu bar showed `⚠`, then flipped to the healthy `⧉` on its own (expected —
+see the polling note above), and `--check` reported Accessibility as granted.
+Despite that, selecting text anywhere — including native AppKit (TextEdit),
+the most-verified path — never reached the clipboard.
+
+**Root cause:** a stale TCC record at this install path, left over from the
+day's earlier rebuilds (see "Root cause" above — repeated identity changes at
+one path can leave a grant that the *toggle* reports as on but that TCC never
+actually honours for the running process). `--check` cannot catch this: its
+Accessibility check runs `AXIsProcessTrusted()` in the *terminal's* process,
+not the target binary's, so it reports the terminal's own grant and looks fine
+regardless of the daemon's real state.
+
+**How this was actually diagnosed** — by ruling things out in order:
+
+1. Confirmed the failure wasn't app-specific: it failed identically in Chrome
+   and in TextEdit (native AppKit, zero AX ambiguity).
+2. Confirmed the running process was current: matched the installed binary's
+   `codesign` identity, LaunchAgent path, and mtime against the latest build.
+3. Ran the same binary in the **foreground** from a Terminal that already held
+   Accessibility trust. Copying **worked** there. That isolated the problem to
+   *this specific process's* grant, not the code.
+4. `tccutil reset Accessibility dev.copy-on-select`, restarted via
+   `launchctl unload`/`load` so the process re-registers and re-prompts,
+   re-enabled the checkbox in System Settings. Copying worked again after that.
+
+**Fix:**
+
+```sh
+launchctl unload ~/Library/LaunchAgents/dev.copy-on-select.plist 2>/dev/null
+pkill -f CopyOnSelect
+tccutil reset Accessibility dev.copy-on-select
+launchctl load ~/Library/LaunchAgents/dev.copy-on-select.plist
+```
+
+Then re-enable **CopyOnSelect** in **System Settings → Privacy & Security →
+Accessibility** (it will likely show as off, or drop off the list) and restart
+the process once more so it picks up the fresh grant.
+
+**Takeaway:** if the icon and `--check` both look healthy but copying still
+does nothing, do not trust either signal — they can't see the daemon's actual
+TCC state. Go straight to the foreground-run test in step 3 above to confirm
+whether it's a permission problem before looking anywhere else.
+
+---
+
 ## If a normal re-grant does not take: the recovery recipe
 
 Almost always, re-enabling the checkbox and restarting the process is enough.
