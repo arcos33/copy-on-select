@@ -51,6 +51,15 @@ enum AX {
         "AXWebArea",
         "AXHeading",
         "AXLink",
+        // Measured 2026-09-15: Chrome's hit test on a page drag routinely lands
+        // on the outer AXScrollArea/AXGroup wrapping the AXWebArea rather than
+        // on the web area itself. Excluding them here isn't the ambiguous case
+        // the comment above warns about — they're generic containers, not
+        // interactive controls (those are already filtered by
+        // interactiveLeafRoles above) — so refusing to walk up from them just
+        // silently broke Chrome selection instead of avoiding any real risk.
+        kAXScrollAreaRole as String,
+        kAXGroupRole as String,
     ]
 
     /// Roles worth *asking* for a selection while walking up. Broader than the

@@ -192,7 +192,13 @@ right default for a personal build.
 
 ---
 
-## 6. Grant Accessibility — USER ACTION REQUIRED
+## 6. Grant Accessibility AND Input Monitoring — USER ACTION REQUIRED
+
+Two separate permissions are required, and both are easy to miss because the
+app can look completely healthy without either one — see
+`TROUBLESHOOTING.md` under "Two permissions are needed" and "Event tap
+silently stops delivering events" for what each one actually gates and what it
+looks like when only one is granted.
 
 Start it once so macOS registers it and shows the permission prompt:
 
@@ -209,10 +215,16 @@ Then **stop** and give your user these instructions verbatim:
 > press ⌘⇧G in the picker, enter `~/Applications`, and select
 > **CopyOnSelect.app**.
 >
-> Tell me when it is enabled.
+> Then open **System Settings → Privacy & Security → Input Monitoring** and do
+> the same: find **CopyOnSelect** and turn it **on** (add it with **+** if it
+> is not listed). If macOS asks you to quit and reopen the app after toggling
+> it, let it.
+>
+> Tell me when both are enabled.
 
-Wait for confirmation. The running instance picks up the grant automatically —
-your user does not need to restart it.
+Wait for confirmation. The running instance picks up an Accessibility grant
+automatically; an Input Monitoring grant may require the quit-and-reopen macOS
+itself prompts for.
 
 **Verify**
 
@@ -317,7 +329,9 @@ Summarise for them:
   ones (Finder, terminals, editors — see step 8).
 - It starts automatically at login.
 - The menu bar icon `⧉` has **Pause**, **Reveal Config…**, and **Quit**. A `⚠`
-  icon means Accessibility was revoked or the event tap died.
+  icon means Accessibility was revoked or the event tap died — the latter can
+  also mean Input Monitoring was revoked, since the icon can't tell the two
+  apart (see `TROUBLESHOOTING.md`).
 - It overwrites the clipboard often. A clipboard manager (Maccy, Raycast) is
   worth pairing with it.
 - By default selections **do** appear in clipboard history. Setting
@@ -351,6 +365,6 @@ test -e ~/Applications/CopyOnSelect.app && echo "FAIL: app remains" || echo "rem
 
 Then tell your user to remove the leftover entry manually — you cannot:
 
-> Open **System Settings → Privacy & Security → Accessibility** and remove
-> **CopyOnSelect** from the list. Optionally delete the
-> `copy-on-select-local` certificate from Keychain Access.
+> Open **System Settings → Privacy & Security → Accessibility** and **→ Input
+> Monitoring** and remove **CopyOnSelect** from both lists. Optionally delete
+> the `copy-on-select-local` certificate from Keychain Access.

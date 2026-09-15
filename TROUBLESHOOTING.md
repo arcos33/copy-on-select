@@ -102,6 +102,107 @@ whether it's a permission problem before looking anywhere else.
 
 ---
 
+## Event tap silently stops delivering events (icon looks healthy, or flaps between healthy and missing)
+
+Seen 2026-09-15, during the same-day churn that produced the stale-TCC finding
+above. After several `tccutil reset` + re-grant cycles and a reinstall at a new
+path (`~/Applications/copy-on-select/CopyOnSelect.app`), two new symptoms
+appeared and **persisted across a full logout/login**:
+
+1. The menu bar icon intermittently stopped rendering at all, even though
+   in-process `NSStatusItem.isVisible` reported `true`.
+2. `engine.start()` returned `true` (tap created) and `AXIsProcessTrusted()`
+   was `true`, but `CGEvent.tapIsEnabled` reported `false` immediately, and
+   **zero** mouse-down/up events ever reached `Engine.handle`. Selecting text
+   produced no copy and no event at all — a fully "healthy-looking" daemon
+   that had gone deaf.
+
+**Ruled out first:** the WindowServer/login-session-cache theory (that
+`tccutil reset` desyncs a per-session cache that only a logout/login clears).
+A fresh login session showed the identical symptoms — `isTapActive=false`
+immediately after tap creation — which is inconsistent with a stale *session*
+cache. Also ruled out: launchd loading the job into the wrong bootstrap
+domain — re-bootstrapping explicitly into `gui/<uid>` (`launchctl bootstrap
+gui/$(id -u) ~/Library/LaunchAgents/dev.copy-on-select.plist` instead of the
+legacy `launchctl load`) made no difference either.
+
+**Root cause:** **Input Monitoring** (`kTCCServiceListenEvent`) was listed for
+the app in **System Settings → Privacy & Security → Input Monitoring** but
+toggled **off** — see the corrected section above. This is a separate
+permission from Accessibility and gates event-tap *delivery*, not tap
+*creation*. `AXIsProcessTrusted()`, `engine.start()`, and even
+`CGEvent.tapCreate` itself can all report success without it; only
+`CGEvent.tapIsEnabled` and the actual absence of callbacks give it away.
+
+**How this was diagnosed:** temporary file-based debug logging (not the
+unified log — reading it via `log show` requires Full Disk Access for the
+terminal, which this session didn't have) at `applicationDidFinishLaunching`,
+`Engine.handle`, and `MenuBar.updateButton`, showing `isTapActive=false`
+immediately after a `true` return from `engine.start()`, with no `handle:`
+lines ever appearing regardless of selections made. That combination —
+creation succeeding, activity flag false, zero callback log lines — is the
+fingerprint of a missing Input Monitoring grant rather than an Accessibility
+or WindowServer problem.
+
+**Fix:**
+
+> **System Settings → Privacy & Security → Input Monitoring** → find
+> **CopyOnSelect** → toggle **on**. macOS will ask you to quit and reopen the
+> app; let it. Confirm with `pbpaste` after selecting text — no rebuild,
+> re-sign, or reinstall needed, since this permission is independent of code
+> signature and install path.
+
+**Takeaway:** if the tap-health signals (`AXIsProcessTrusted`,
+`engine.start()` return value) all say healthy but no events ever arrive,
+don't keep chasing Accessibility or WindowServer/session state — check Input
+Monitoring first. It fails silently and looks identical to a dead tap from the
+outside.
+
+---
+
+## Chrome never copies, even though everything else (permissions, tap, TextEdit) is healthy
+
+Seen 2026-09-15, found while re-verifying copy after the Input Monitoring fix
+above. Every permission was granted, the event tap was firing, and TextEdit
+copied correctly — but selecting text in Chrome produced nothing, silently,
+with no error anywhere.
+
+**Root cause:** a role-gating bug in `AX.findSelection` (`AX.swift`), not a
+permission problem. `AXUIElementCopyElementAtPosition` frequently hit-tests a
+Chrome page drag onto the outer `AXScrollArea`/`AXGroup` wrapping the page's
+`AXWebArea`, rather than onto the web area or a text node directly. The code
+only permits walking up to ancestors (`mayConsultAncestors`) when the *clicked
+leaf's* role is in `leafTextRoles` — and neither `AXScrollArea` nor `AXGroup`
+were in that set, even though both are already in `readableRoles` (the set
+consulted once walking is allowed). So a depth-0 `AXScrollArea` hit had no
+route to ever reach the ancestor `AXWebArea` that actually held the selection:
+`findSelection` returned `.none` every time, indistinguishable from "nothing
+was selected."
+
+**How this was diagnosed:** temporary logging in `findSelection` of the leaf
+role, `mayConsultAncestors`, and the role at each depth of the walk. It showed
+`leafRole=AXScrollArea mayConsultAncestors=false`, with the walk staying on
+`AXGroup` at every depth up to `maxAncestorWalk` and never encountering
+`AXWebArea` — confirming the gate, not the walk depth or the hit-test itself,
+was the blocker.
+
+**Fix:** added `kAXScrollAreaRole` and `kAXGroupRole` to `leafTextRoles`
+(`AX.swift:44`). These are generic containers, not interactive controls — the
+ambiguity the `leafTextRoles` gate exists to prevent (picking up an unrelated
+container's stale selection) is about controls like buttons and images,
+already filtered earlier by `interactiveLeafRoles`. Restricting ancestor
+lookups to a fixed leaf-role allowlist doesn't add real safety there; it just
+breaks browsers whose hit test lands on a generic wrapper. `maxAncestorWalk`
+(default `5`) was confirmed deep enough to reach `AXWebArea` from a typical
+Chrome scroll-area hit — no change needed there.
+
+**Takeaway:** if a specific app (especially a browser) never copies while
+everything else works, suspect the role-gating logic before permissions —
+temporarily logging the leaf role and the role at each ancestor-walk depth
+will show immediately whether the walk is even being allowed to start.
+
+---
+
 ## If a normal re-grant does not take: the recovery recipe
 
 Almost always, re-enabling the checkbox and restarting the process is enough.
@@ -171,15 +272,28 @@ A bundle is what macOS expects from anything requesting Accessibility. Do not
 
 ---
 
-## Only ONE permission is needed
+## Two permissions are needed: Accessibility AND Input Monitoring
 
-**Accessibility.** Nothing else.
+**Corrected 2026-09-15** — this section previously said Input Monitoring
+should be declined. That was wrong and cost a long debugging session; see
+"Event tap silently stops delivering events" below for how this was found.
 
-If macOS offers **Input Monitoring**, decline it. The event tap listens to
-left-mouse-down/up only; keyboard events are deliberately not tapped (modifier
-state is read on demand via `CGEventSource.flagsState`). macOS offers that row
-to anything creating an event tap, but this app does not need it and should not
-have it.
+Both are required, and they gate different things:
+
+- **Accessibility** (`AXIsProcessTrusted`) — required to read selections and
+  hit-test elements. Without it, `Engine.start()` returns `false` and the tap
+  is never created at all.
+- **Input Monitoring** (`kTCCServiceListenEvent`) — required for the event tap
+  to actually *deliver* events, even though the tap only listens
+  (`.listenOnly`) to left-mouse-down/up and never taps keyboard events.
+  `CGEvent.tapCreate` can **succeed** without this grant — the mach port gets
+  created and `engine.start()` returns `true` — but `CGEvent.tapIsEnabled`
+  reports `false` and the callback never fires. This looks exactly like a
+  healthy tap that has gone deaf, not like a missing permission.
+
+If macOS offers the Input Monitoring row when the app first runs, **grant it**.
+Declining it, or having it silently toggled off during TCC churn, produces the
+symptom below.
 
 ---
 
