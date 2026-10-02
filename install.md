@@ -5,9 +5,10 @@ You are an AI coding agent installing copy-on-select for your user.
 Work through the sections in order. Each one ends with a **Verify** block. **If a
 verification fails, stop and show your user the output instead of improvising.**
 
-Two steps cannot be done by you — creating a code-signing certificate (step 3)
-and granting Accessibility (step 6) are both GUI actions. For those, stop, give
-your user the exact instructions, and wait for them to confirm before continuing.
+Granting Accessibility and Input Monitoring (step 6) cannot be automated; macOS
+requires the user to approve both in System Settings. Creating the code-signing
+certificate (step 3) can and should be automated. A Keychain Access walkthrough
+is included only as a fallback.
 
 **Complete list of what this installs:**
 
@@ -65,7 +66,7 @@ test -x .build/release/copy-on-select && echo "built ok"
 
 ---
 
-## 3. Code-signing certificate — USER ACTION REQUIRED
+## 3. Code-signing certificate
 
 Ad-hoc signing (the default) changes the binary's identity on every rebuild, and
 macOS binds the Accessibility grant to that identity. Without a stable
@@ -77,11 +78,65 @@ First check whether the certificate already exists:
 security find-certificate -c copy-on-select-local >/dev/null 2>&1 && echo "exists" || echo "missing"
 ```
 
-If it prints `missing`, **stop** and walk your user through the wizard below.
-Do not just say "create a code-signing certificate" — it is an eight-screen
-assistant with defaults that are wrong for this purpose, and one screen leaks
-their email address into the certificate. Give them the screens one at a time,
-in order, and tell them exactly what to enter.
+If it prints `missing`, create and import the identity programmatically. This
+avoids the nine-screen Certificate Assistant, leaves personal information out
+of the certificate, and limits private-key access to Apple's `codesign` tool.
+It uses a random, one-time password only to protect the temporary PKCS#12 file;
+the file and password are deleted immediately after import.
+
+Use macOS's bundled `/usr/bin/openssl` deliberately. Homebrew OpenSSL 3 emits a
+newer PKCS#12 format by default that `security import` can reject with the
+misleading error `MAC verification failed during PKCS12 import (wrong
+password?)`. The bundled LibreSSL produces the legacy-compatible format macOS's
+keychain importer expects.
+
+```sh
+(
+  set -e
+  CERT_TMP="$(mktemp -d)"
+  chmod 700 "$CERT_TMP"
+
+  cleanup_certificate_files() {
+    rm -f "$CERT_TMP/key.pem" "$CERT_TMP/cert.pem" \
+      "$CERT_TMP/identity.p12" "$CERT_TMP/pass.txt"
+    rmdir "$CERT_TMP"
+  }
+  trap cleanup_certificate_files EXIT
+
+  /usr/bin/openssl req -new -newkey rsa:2048 -nodes -x509 -days 7300 \
+    -subj '/CN=copy-on-select-local' \
+    -addext 'keyUsage=critical,digitalSignature' \
+    -addext 'extendedKeyUsage=critical,codeSigning' \
+    -addext 'basicConstraints=critical,CA:FALSE' \
+    -keyout "$CERT_TMP/key.pem" -out "$CERT_TMP/cert.pem"
+
+  /usr/bin/openssl rand -hex 32 > "$CERT_TMP/pass.txt"
+  chmod 600 "$CERT_TMP/key.pem" "$CERT_TMP/cert.pem" "$CERT_TMP/pass.txt"
+
+  /usr/bin/openssl pkcs12 -export -name copy-on-select-local \
+    -inkey "$CERT_TMP/key.pem" -in "$CERT_TMP/cert.pem" \
+    -out "$CERT_TMP/identity.p12" -passout file:"$CERT_TMP/pass.txt"
+
+  security import "$CERT_TMP/identity.p12" \
+    -k "$HOME/Library/Keychains/login.keychain-db" \
+    -P "$(tr -d '\n' < "$CERT_TMP/pass.txt")" \
+    -T /usr/bin/codesign
+)
+```
+
+The import may ask the user to unlock the login keychain. Later, the first
+`codesign` can show a key-access dialog; **Always Allow** prevents that prompt
+from returning on each rebuild, while **Allow** works for the current build.
+Never replace `-T /usr/bin/codesign` with `-A`: `-A` lets every application use
+the private key.
+
+If the programmatic import fails, stop and show the user its output instead of
+weakening the key's access controls or retrying with `-A`. The Keychain Access
+route below is the safe fallback. Do not just say "create a code-signing
+certificate" — it is a nine-screen assistant with defaults that are wrong for
+this purpose, and one screen leaks their email address into the certificate.
+Give the user the screens one at a time, in order, and tell them exactly what
+to enter.
 
 > Open **Keychain Access** (⌘-Space → "Keychain Access"), then menu
 > **Keychain Access → Certificate Assistant → Create a Certificate…**
