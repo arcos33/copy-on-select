@@ -47,7 +47,7 @@ final class CopyToast {
 
     private func makePanel() -> NSPanel {
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 92, height: 34),
+            contentRect: NSRect(x: 0, y: 0, width: 368, height: 136),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false)
@@ -58,17 +58,14 @@ final class CopyToast {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
         panel.ignoresMouseEvents = true
 
-        let background = NSVisualEffectView()
-        background.material = .hudWindow
-        background.blendingMode = .withinWindow
-        background.state = .active
+        let background = CopyToastBackgroundView()
         background.wantsLayer = true
-        background.layer?.cornerRadius = 17
+        background.layer?.cornerRadius = 68
         background.layer?.masksToBounds = true
 
         let label = NSTextField(labelWithString: "Copied")
-        label.font = .systemFont(ofSize: 12, weight: .semibold)
-        label.textColor = .labelColor
+        label.font = .systemFont(ofSize: 48, weight: .semibold)
+        label.textColor = .white
         label.translatesAutoresizingMaskIntoConstraints = false
         background.addSubview(label)
         NSLayoutConstraint.activate([
@@ -77,5 +74,16 @@ final class CopyToast {
         ])
         panel.contentView = background
         return panel
+    }
+}
+
+private final class CopyToastBackgroundView: NSView {
+    private let gradient = NSGradient(
+        starting: NSColor(srgbRed: 0, green: 100.0 / 255, blue: 230.0 / 255, alpha: 1),
+        ending: NSColor(srgbRed: 45.0 / 255, green: 146.0 / 255, blue: 1, alpha: 1))
+
+    override func draw(_ dirtyRect: NSRect) {
+        // AppKit's unflipped coordinates run upward: deeper blue below, lighter above.
+        gradient?.draw(in: bounds, angle: 90)
     }
 }

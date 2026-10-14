@@ -2,7 +2,8 @@
 
 Select text anywhere on macOS and it is on your clipboard. That is the whole app.
 
-A small, temporary **Copied** confirmation appears after each successful copy.
+A large, temporary **Copied** confirmation with white text on a blue gradient
+appears after each successful copy.
 
 You build it yourself from source you can read. It contains no networking code,
 execs no subprocesses (no `Process`, no `posix_spawn`, no `NSAppleScript`), and
