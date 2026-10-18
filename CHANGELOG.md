@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0 — 2026-10-18
+
+- Added app version at the top of the menu; bumped metadata to 1.1.0 (build 2).
+- New-install instructions copy the source plist so embedded and packaged versions agree.
+
 ## 2026-10-17
 
 - Prepared the user-verified repair and audited documentation for user-authorized commit and push; refreshed current handoff publication guidance.

@@ -1,5 +1,9 @@
 # Session Log
 
+## 2026-10-18 — Visible version number
+
+Implemented and installed 1.1.0 (build 2) on the Mac mini. Release build, plist validation, strict signature verification, staged/installed binary comparison and diff check passed. LaunchAgent runs one process. Preserved original certificate DFB4CDB9E1186449F600B5DC796C5B89B03E0865 and app path /Applications/CopyOnSelect.app. Executable and LaunchAgent now consistently use copy-on-select to match embedded metadata. Backup: ~/Library/Application Support/copy-on-select/backups/version-1.1.0-20261018/. PiKVM session ended without capturing the app menu; Joel subsequently confirmed the update works and authorized committing the changes.
+
 ## 2026-10-17 — Deployment, permission and Chrome recovery; documentation audit
 
 Source main matched origin/main at `dff0489`, with a clean tree initially;

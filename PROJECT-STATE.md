@@ -1,5 +1,11 @@
 # Project State
 
+## Mac mini update — 2026-10-18
+
+Version 1.1.0 (build 2) installed at /Applications/CopyOnSelect.app; menu includes the version from bundle metadata. Release build, signature, installed-binary comparison and one running LaunchAgent process verified. Original Mac mini certificate retained. Backup and details in SESSION-LOG.md. Joel confirmed the menu/version update works on 2026-10-18.
+
+Next action: scope the proposed hold-to-paste gesture before implementation. The October 17 installation below belongs to the jediOne Mac, not this Mac mini.
+
 ## Current status — 2026-10-17
 
 User confirmed CopyOnSelect works after the October 17 repair. The current app

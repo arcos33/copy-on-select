@@ -90,6 +90,12 @@ final class MenuBar: NSObject, NSMenuDelegate {
         menu.removeAllItems()
         updateButton()
 
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
+        let versionItem = NSMenuItem(title: "CopyOnSelect v\(version)", action: nil, keyEquivalent: "")
+        versionItem.isEnabled = false
+        menu.addItem(versionItem)
+        menu.addItem(.separator())
+
         let statusText: String
         if !AX.isTrusted {
             statusText = "Accessibility not granted"

@@ -13,3 +13,8 @@
 - 2026-10-08: Enlarged snackbar to 368 × 136 pt with 48 pt semibold text; Joel confirmed the size is perfect.
 - 2026-10-08: Replaced low-visibility translucent background; Joel rejected teal and charcoal, then approved iMessage-style blue with white text.
 - 2026-10-08: Added the requested lighter-top/deeper-bottom blue gradient; built, signed, installed and restarted with the original identity. Appearance acceptance remains open above.
+
+## Version 1.1.0 — 2026-10-18
+
+- Implemented and installed: menu version label, metadata 1.1.0/build 2.
+- Confirmed by Joel: version update works on Mac mini (2026-10-18).

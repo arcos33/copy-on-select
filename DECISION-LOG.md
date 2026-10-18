@@ -1,5 +1,9 @@
 # Decision Log
 
+## 2026-10-18 — Version label and machine-specific deployment
+
+Joel approved 1.1.0, treating the earlier app as 1.0.0. Read the menu version from bundle metadata. Synced October 17 installation notes describe the jediOne Mac, not the Mac mini: live LaunchAgent/signature inspection established /Applications/CopyOnSelect.app and DFB4CDB9E1186449F600B5DC796C5B89B03E0865 here. Preserve machine-specific identities; a zero-valid-identities listing did not prevent successful staged signing with this existing certificate and strict verification.
+
 Entries below record decisions and evidence at their dates, including interim
 uncertainty. For current verified status read README and PROJECT-STATE.md;
 October 17 ended with user-confirmed working behavior.
