@@ -1,25 +1,28 @@
 # Troubleshooting
 
-Any app that copies on selection needs macOS Accessibility, and macOS ties that
-permission to the app's **code signature and install path**. Change either and
-the grant is silently revoked. That is the one failure mode worth knowing about
-here — everything below is about recognising it and fixing it quickly.
+**Start with the current [README agent maintenance runbook](README.md#agent-maintenance-runbook--read-before-updating-or-troubleshooting).**
+It records the October 17 verified installation, Keychain checks, packaging
+repair, stale Input Monitoring requirement, Chrome activation fix and exact
+diagnostic order. The September entries below preserve older incident history;
+they are not all explanations for the same failure or steps to run blindly.
 
-The common way to meet it is an upgrade: rebuilding produces a new binary
-identity, so macOS drops the grant and the app goes quiet until you re-enable
-it. Usually that is a single checkbox.
+Both Accessibility and Input Monitoring are required. Signing identity/path
+changes can invalidate saved grants; same-certificate updates with valid bundle
+metadata need not revoke them. Valid permissions do not guarantee a browser
+exposes its selected text. Check deployment, packaging, daemon-attributed
+permission evidence, event delivery, selection resolution and copy/toast behavior
+in that order. Avoid repeated resets or reinstalling an already working app.
 
 ## The menu bar icon is ⚠ and nothing copies
 
-⚠ means one thing: **the app has no Accessibility trust** (or its event tap
-died). It is a *permission* problem, not a code problem — the app is telling
-you it cannot see anything.
+⚠ indicates unhealthy Accessibility/event-tap state. Read the menu status and
+trace the daemon before inferring which permission or code path is responsible.
 
 ### First, the 30-second checks
 
 ```sh
 # Is it running, and from where?
-ps -o pid,command= -p "$(pgrep -f CopyOnSelect | head -1)"
+ps -axo pid,ppid,comm | rg 'CopyOnSelect.app/Contents/MacOS/'
 
 # Is it signed with ITS OWN certificate? (must say copy-on-select-local)
 # NOTE: -dvv, not -dv. One "v" does not print the Authority line and has
@@ -27,9 +30,9 @@ ps -o pid,command= -p "$(pgrep -f CopyOnSelect | head -1)"
 codesign -dvv ~/Applications/copy-on-select/CopyOnSelect.app 2>&1 | grep Authority
 ```
 
-**Restart the process after any permission change.** A running process does not
-pick up a newly granted permission — most "it still doesn't work" reports are
-really "the old process is still running".
+The app retries after an initial startup failure, but Input Monitoring changes
+may require a restart. After a grant, restart deliberately if needed and check
+for duplicate processes rather than assuming a toggle alone is sufficient.
 
 ---
 
@@ -54,6 +57,11 @@ Things that have broken it in practice:
 ---
 
 ## Icon looks healthy, `--check` says granted, but nothing ever copies
+
+**Historical September incident.** The following records the original
+investigation. For current recovery use the README's scoped service reset,
+confirmed process IDs and current path; do not copy the old broad `pkill`/load
+sequence into a working deployment.
 
 Seen 2026-09-15, right after a same-day rebuild (the toast-notification change).
 The menu bar showed `⚠`, then flipped to the healthy `⧉` on its own (expected —
@@ -95,10 +103,10 @@ Then re-enable **CopyOnSelect** in **System Settings → Privacy & Security →
 Accessibility** (it will likely show as off, or drop off the list) and restart
 the process once more so it picks up the fresh grant.
 
-**Takeaway:** if the icon and `--check` both look healthy but copying still
-does nothing, do not trust either signal — they can't see the daemon's actual
-TCC state. Go straight to the foreground-run test in step 3 above to confirm
-whether it's a permission problem before looking anywhere else.
+**Current takeaway:** a terminal-launched `--check` can reflect the responsible
+terminal's grant in either direction. Prefer actual daemon-attributed TCC logs
+and opt-in tracing. The foreground comparison above is historical evidence,
+not today's default diagnostic: it can change attribution and create duplicates.
 
 ---
 
@@ -134,9 +142,9 @@ permission from Accessibility and gates event-tap *delivery*, not tap
 `CGEvent.tapCreate` itself can all report success without it; only
 `CGEvent.tapIsEnabled` and the actual absence of callbacks give it away.
 
-**How this was diagnosed:** temporary file-based debug logging (not the
-unified log — reading it via `log show` requires Full Disk Access for the
-terminal, which this session didn't have) at `applicationDidFinishLaunching`,
+**How this was diagnosed:** temporary file-based debug logging (that session
+could not access useful unified logs; availability differs by execution context,
+and October 17 successfully used focused `log show --info --debug`) at `applicationDidFinishLaunching`,
 `Engine.handle`, and `MenuBar.updateButton`, showing `isTapActive=false`
 immediately after a `true` return from `engine.start()`, with no `handle:`
 lines ever appearing regardless of selections made. That combination —
@@ -149,8 +157,9 @@ or WindowServer problem.
 > **System Settings → Privacy & Security → Input Monitoring** → find
 > **CopyOnSelect** → toggle **on**. macOS will ask you to quit and reopen the
 > app; let it. Confirm with `pbpaste` after selecting text — no rebuild,
-> re-sign, or reinstall needed, since this permission is independent of code
-> signature and install path.
+> re-sign, or reinstall needed merely to enable it. It is separate from
+> Accessibility, but it also has saved code-identity requirements; October 17
+> logs showed an old certificate requirement rejecting the updated app.
 
 **Takeaway:** if the tap-health signals (`AXIsProcessTrusted`,
 `engine.start()` return value) all say healthy but no events ever arrive,
@@ -205,57 +214,31 @@ will show immediately whether the walk is even being allowed to start.
 
 ## If a normal re-grant does not take: the recovery recipe
 
-Almost always, re-enabling the checkbox and restarting the process is enough.
-This section is for the rarer case where the grant refuses to stick — which
-happens when one install path has accumulated several different signing
-identities, leaving stale permission records that shadow the new grant.
+The old procedure here moved the app and deleted the prior bundle. Do not run
+that as a first response. October 17 demonstrated that repeated Accessibility
+resets/path changes did not address a separate stale ListenEvent requirement
+or Chrome's unactivated web tree. Packaging first had to be repaired so the
+Settings picker could accept the app.
 
-A reboot is **not** required (it was twice the wrong instinct when we hit this).
-TCC records are keyed by path, so a path macOS has never seen gets a clean
-record.
+1. Verify bundle metadata, original signing requirement and intended process.
+2. Use TCC logs to identify the rejected service and requirement. If only
+   ListenEvent is stale, preserve working Accessibility (and vice versa).
+3. Reset only the diagnosed service for `dev.copy-on-select`, then ask the user
+   to add/enable the exact current bundle in that service's pane.
+4. Restart one LaunchAgent process, check callback/selection evidence and test
+   fresh text without pressing ⌘C.
+5. Only consider a fresh path if packaging and scoped recovery fail and
+   evidence still points to the old registration/path. Preserve a recoverable
+   backup and matching plist, update registration/LaunchAgent together, and
+   retire only confirmed stale entries for this app. Do not delete a working
+   bundle or reset unrelated applications' permissions.
 
-```sh
-# 1. Stop everything
-launchctl unload ~/Library/LaunchAgents/dev.copy-on-select.plist 2>/dev/null
-pkill -f CopyOnSelect; sleep 1
-
-# 2. Reinstall the bundle at a NEW path (any unused path works)
-NEW="$HOME/Applications/copy-on-select/CopyOnSelect.app"
-mkdir -p "$(dirname "$NEW")"
-cp -R <old bundle> "$NEW"
-codesign --force --deep --sign copy-on-select-local "$NEW"
-
-# 3. Point the LaunchAgent at the new inner executable
-#    ProgramArguments[0] = "$NEW/Contents/MacOS/CopyOnSelect"
-
-# 4. Delete the old bundle so nobody grants permission to a corpse
-rm -rf <old bundle>
-
-# 5. Launch it once so macOS registers it
-open "$NEW"
-```
-
-Then, in **System Settings → Privacy & Security → Accessibility**:
-
-1. **Remove every stale row** with **–** — any entry pointing at a path that no
-   longer exists. *This step matters:* the fresh path alone did not work until
-   the stale rows were gone. macOS matched the old record first.
-2. Add the new app: **+** → ⌘⇧G → the new folder → select `CopyOnSelect.app`
-3. Toggle it **on**
-4. **Restart the process** (`launchctl unload && load`) so it re-queries trust
-5. Test: `pbpaste` before and after selecting text
-
-Lighter things worth trying first, in order — they are cheap and sometimes
-enough:
-
-```sh
-killall tccd                                   # restart the permission daemon
-tccutil reset Accessibility dev.copy-on-select # wipe this app's TCC record
-```
-
-`tccutil` only works because the app is a **bundle**. It cannot target a bare
-executable ("No such bundle identifier"), which is one of several reasons the
-bundle format is mandatory here.
+The known-good path is already `~/Applications/copy-on-select/CopyOnSelect.app`;
+do not select it as a supposedly unused recovery destination. Its executable
+is `Contents/MacOS/copy-on-select`, not the old uppercase filename. A reboot,
+logout, killing all permission daemons or changing to a root launch domain is
+not the default recovery action. See README for scoped reset commands and
+the user-facing add instructions.
 
 ---
 
@@ -281,8 +264,9 @@ should be declined. That was wrong and cost a long debugging session; see
 Both are required, and they gate different things:
 
 - **Accessibility** (`AXIsProcessTrusted`) — required to read selections and
-  hit-test elements. Without it, `Engine.start()` returns `false` and the tap
-  is never created at all.
+  hit-test elements. `Engine.start()` delegates to event-tap creation rather
+  than explicitly checking this grant; a successful start alone does not
+  establish accessible selection data.
 - **Input Monitoring** (`kTCCServiceListenEvent`) — required for the event tap
   to actually *deliver* events, even though the tap only listens
   (`.listenOnly`) to left-mouse-down/up and never taps keyboard events.

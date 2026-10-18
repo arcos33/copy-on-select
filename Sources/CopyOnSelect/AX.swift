@@ -264,7 +264,18 @@ enum AX {
 
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, messagingTimeout)
-        AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+        let result = AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+        DebugTrace.log("manual accessibility result=\(result.rawValue)")
+        if result == .attributeUnsupported || result == .notImplemented {
+            // Chrome's native application does not implement Electron's
+            // AXManualAccessibility hook. Its enhanced-UI hook activates the
+            // web-content tree after a debounce; later gestures can read it.
+            // Request once per process so repeated gestures don't restart that
+            // debounce indefinitely.
+            let enhanced = AXUIElementSetAttributeValue(
+                app, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
+            DebugTrace.log("enhanced accessibility result=\(enhanced.rawValue)")
+        }
     }
 
     // MARK: - Selection bounds
@@ -337,6 +348,7 @@ enum AX {
         // slow enough to matter.
         let leafRole = role(element)
         let leafSubrole = subrole(element)
+        DebugTrace.log("leaf role=\(leafRole ?? "unknown") subrole=\(leafSubrole ?? "none")")
 
         if isSecure(role: leafRole, subrole: leafSubrole) { return .secure }
 
@@ -353,6 +365,7 @@ enum AX {
         while let node = current, depth < maxDepth {
             let nodeRole = depth == 0 ? leafRole : role(node)
             let nodeSubrole = depth == 0 ? leafSubrole : subrole(node)
+            DebugTrace.log("selection walk depth=\(depth) role=\(nodeRole ?? "unknown")")
 
             // Checked at every level: a secure field anywhere on the path means
             // stop entirely rather than continue up to a readable ancestor.

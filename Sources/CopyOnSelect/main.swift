@@ -59,7 +59,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         menuBar.install()
 
-        if engine.start() {
+        let started = engine.start()
+        DebugTrace.log("startup trusted=\(AX.isTrusted) started=\(started) tapActive=\(engine.isTapActive)")
+        if started {
             return
         }
 

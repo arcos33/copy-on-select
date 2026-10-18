@@ -1,5 +1,47 @@
 # Session Log
 
+## 2026-10-17 — Deployment, permission and Chrome recovery; documentation audit
+
+Source main matched origin/main at `dff0489`, with a clean tree initially;
+the installed app differed from the local build and its LaunchAgent was stopped.
+These were separate source/deployment/runtime observations, not proof of the
+installed app's precise source revision.
+
+Rebuilt and preserved the existing session signing identity. Restricted
+diagnostics misleadingly reported absent/untrusted identities and denied
+Accessibility. A bundle executable/embedded metadata case mismatch left
+Info.plist unbound; corrected it to `copy-on-select`, re-signed with the same
+certificate and verified a bound plist. Settings then accepted the app.
+A visible backup `.app` confused permission targeting; backup/staging bundles
+were renamed `.bundle-backup`. Current live path is
+`~/Applications/copy-on-select/CopyOnSelect.app`.
+
+Repeated Accessibility resets/restarts and a fresh path did not resolve all
+issues. Daemon-attributed TCC logs confirmed Accessibility allowed, while
+ListenEvent rejected the app against an older certificate. Reset only
+ListenEvent, user re-granted Input Monitoring, and both services then allowed
+the actual daemon. Removed manual/quit-and-reopen duplicate processes.
+
+Opt-in diagnostics confirmed a healthy tap and Chrome gestures but no accessible
+selection: AXManualAccessibility returned -25205 and hit tests exposed only
+scroll/group containers. Added Chromium's enhanced-UI activation fallback once
+per process; after its delay, trace reached AXStaticText, selection found,
+commit and toast. User explicitly confirmed working behavior. Disabled debug
+LaunchAgent overrides, restarted and verified one managed process. Runtime
+configuration/content was preserved; no unrelated Keychain identities changed.
+
+Current unrestricted identity check finds the expected certificate valid until
+2046-10-12. Earlier restricted checks and older trust/name notes are historical,
+not instructions to replace the working identity. Known backups and current
+values are recorded in PROJECT-STATE.md and SPECS.md.
+
+Audited the original September/October setup notes alongside this session,
+expanded README's Keychain/runbook/incident/tool/rollback guidance, corrected
+conflicting install/troubleshooting advice, and refreshed stale project handoff
+files. Historical incident entries below remain dated evidence; prior pending
+states do not override the latest user-confirmed checkpoint. Local changes
+remain uncommitted/unpushed. This documentation audit made no runtime changes.
+
 ## 2026-10-08 — Enlarge Copied snackbar
 
 Changed three UI dimensions, built release, preserved old bundle, signed with the existing identity, installed and restarted. Release build, `git diff --check`, matching designated requirement and strict signature verification passed. One app process observed.

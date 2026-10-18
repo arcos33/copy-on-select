@@ -2,6 +2,12 @@
 
 You are an AI coding agent installing copy-on-select for your user.
 
+**Existing installation: read the [README agent maintenance runbook](README.md#agent-maintenance-runbook--read-before-updating-or-troubleshooting)
+first.** This guide's `~/Applications/CopyOnSelect.app` path is a new-install
+example, not this Mac's current path. Preserve its existing path, certificate,
+permissions and config. Do not create another identity or run the new-install
+sequence over a working deployment.
+
 Work through the sections in order. Each one ends with a **Verify** block. **If a
 verification fails, stop and show your user the output instead of improvising.**
 
@@ -78,7 +84,14 @@ First check whether the certificate already exists:
 security find-certificate -c copy-on-select-local >/dev/null 2>&1 && echo "exists" || echo "missing"
 ```
 
-If it prints `missing`, create and import the identity programmatically. This
+For a new installation only, first distinguish a genuinely absent identity
+from a restricted/locked keychain or failed lookup. Inspect the login keychain
+and match any existing signing identity by fingerprint; a certificate alone
+does not prove a private key is available. For an existing installation, use
+the README Keychain procedure and preserve its identity.
+
+If the identity is genuinely absent on a new installation, create and import
+the identity programmatically. This
 avoids the nine-screen Certificate Assistant, leaves personal information out
 of the certificate, and limits private-key access to Apple's `codesign` tool.
 It uses a random, one-time password only to protect the temporary PKCS#12 file;
@@ -188,7 +201,7 @@ location before granting. Never grant permission to a build-directory copy.
 ```sh
 APP="$HOME/Applications/CopyOnSelect.app"
 mkdir -p "$APP/Contents/MacOS"
-cp .build/release/copy-on-select "$APP/Contents/MacOS/CopyOnSelect"
+cp .build/release/copy-on-select "$APP/Contents/MacOS/copy-on-select"
 cat > "$APP/Contents/Info.plist" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -196,7 +209,7 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
 <dict>
     <key>CFBundleIdentifier</key><string>dev.copy-on-select</string>
     <key>CFBundleName</key><string>CopyOnSelect</string>
-    <key>CFBundleExecutable</key><string>CopyOnSelect</string>
+    <key>CFBundleExecutable</key><string>copy-on-select</string>
     <key>CFBundleShortVersionString</key><string>0.1.0</string>
     <key>CFBundleVersion</key><string>1</string>
     <key>CFBundlePackageType</key><string>APPL</string>
@@ -219,21 +232,28 @@ codesign --force --deep --sign copy-on-select-local "$HOME/Applications/CopyOnSe
 
 ```sh
 APP="$HOME/Applications/CopyOnSelect.app"
-codesign -dv "$APP" 2>&1 | grep -q "Signature=adhoc" \
-  && echo "FAIL: still ad-hoc" \
-  || echo "signed with a stable identity"
-codesign --verify --strict "$APP" && echo "bundle signature valid"
+codesign --verify --deep --strict "$APP"
+codesign -dvv -r- "$APP"
 ```
+
+Both commands must succeed. Inspect the expected certificate requirement,
+Authority and bound `Info.plist entries=...`; reject ad-hoc signing or
+`Info.plist=not bound`. A failed `codesign` piped into a negated grep can
+incorrectly print “signed with a stable identity”; do not use that as proof.
+Use the existing fingerprint rather than an ambiguous certificate name when
+signing an update.
 
 ---
 
 ## 5. Signing warnings — read before touching the signature again
 
-**Never re-sign this app with a different certificate.** macOS pins the
-Accessibility grant to the code signature, so any re-sign silently revokes it,
-and repeated identity changes at one path poison macOS's permission records
-(recovery then needs a fresh install path — see `TROUBLESHOOTING.md`). Every
-rebuild must use the same `copy-on-select-local` identity from step 3.
+**Never re-sign this app with a different certificate.** macOS validates
+saved permission requirements against the signing identity. Rebuilding with
+the same certificate and valid metadata is different from changing identity.
+Both Accessibility and Input Monitoring can retain stale requirements; use
+daemon-attributed evidence and reset only an affected service if necessary.
+A fresh path is a last resort, not an automatic requirement. Every rebuild
+must preserve the same identity from step 3.
 
 ### Do NOT sign with an Apple Developer ID unless you also notarize
 
@@ -284,7 +304,7 @@ itself prompts for.
 **Verify**
 
 ```sh
-~/Applications/CopyOnSelect.app/Contents/MacOS/CopyOnSelect --check
+~/Applications/CopyOnSelect.app/Contents/MacOS/copy-on-select --check
 ```
 
 Note that the check reports the permission of the *responsible* process, so if
@@ -300,9 +320,9 @@ instances — two menu bar icons, two event taps, two processes racing to write
 the clipboard.
 
 ```sh
-pkill -f "CopyOnSelect.app/Contents/MacOS/CopyOnSelect" 2>/dev/null
+pkill -f "CopyOnSelect.app/Contents/MacOS/copy-on-select" 2>/dev/null
 
-sed "s|REPLACE_WITH_INSTALL_PATH|$HOME/Applications/CopyOnSelect.app/Contents/MacOS/CopyOnSelect|" \
+sed "s|REPLACE_WITH_INSTALL_PATH|$HOME/Applications/CopyOnSelect.app/Contents/MacOS/copy-on-select|" \
   examples/dev.copy-on-select.plist > ~/Library/LaunchAgents/dev.copy-on-select.plist
 launchctl unload ~/Library/LaunchAgents/dev.copy-on-select.plist 2>/dev/null
 launchctl load ~/Library/LaunchAgents/dev.copy-on-select.plist
@@ -312,7 +332,7 @@ launchctl load ~/Library/LaunchAgents/dev.copy-on-select.plist
 
 ```sh
 launchctl list | grep dev.copy-on-select && echo "loaded"
-grep -q "CopyOnSelect.app/Contents/MacOS/CopyOnSelect" ~/Library/LaunchAgents/dev.copy-on-select.plist \
+grep -q "CopyOnSelect.app/Contents/MacOS/copy-on-select" ~/Library/LaunchAgents/dev.copy-on-select.plist \
   && echo "path substituted correctly"
 ```
 
@@ -343,36 +363,31 @@ osascript -e 'id of app "Slack"'
 **Verify**
 
 ```sh
-~/Applications/CopyOnSelect.app/Contents/MacOS/CopyOnSelect --check | grep "Config"
+~/Applications/CopyOnSelect.app/Contents/MacOS/copy-on-select --check | grep "Config"
 ```
 
 ---
 
 ## 9. End-to-end test
 
-This one needs your user, because only a human can make a selection.
+Prefer a user-driven test of fresh, non-sensitive text in a local app. It
+validates the experience they actually use without collecting their clipboard.
 
 **Stop** and ask them:
 
-> Open TextEdit, type a sentence, and select it with the mouse. Tell me when
-> you have.
+> Open TextEdit, type a harmless test sentence, select it with the mouse,
+> and check that the blue Copied snackbar appears. Without pressing ⌘C, paste
+> with ⌘V into another blank document. Does it match the selected text?
 
-Then confirm the selection reached the clipboard:
+Have the user also verify Chrome page text. The first gesture may activate
+Chrome's web accessibility tree; allow three seconds and select another phrase.
+Do not remove the enhanced-UI activation fallback or the container-role fix.
 
-```sh
-pbpaste
-```
-
-If `pbpaste` shows the selected sentence, the install works.
-
-Also confirm the safety behaviour — ask your user to drag a file in Finder, then:
-
-```sh
-pbpaste
-```
-
-The output must be **unchanged** (Finder is excluded, and a file drag must never
-land on the clipboard).
+Also ask the user to drag a file in Finder and verify their clipboard is
+unchanged. Finder is excluded; a file drag must not copy files. If diagnostics
+need clipboard inspection, use a known test fixture and avoid printing arbitrary
+user clipboard contents. Preserve the existing config and verify one running
+process after Quit & Reopen.
 
 ---
 
@@ -406,7 +421,7 @@ is never left pointing at a missing executable.
 ```sh
 launchctl unload ~/Library/LaunchAgents/dev.copy-on-select.plist 2>/dev/null
 rm -f ~/Library/LaunchAgents/dev.copy-on-select.plist
-pkill -f "CopyOnSelect.app/Contents/MacOS/CopyOnSelect" 2>/dev/null
+pkill -f "CopyOnSelect.app/Contents/MacOS/copy-on-select" 2>/dev/null
 rm -rf ~/Applications/CopyOnSelect.app
 rm -rf ~/Library/Application\ Support/copy-on-select
 ```

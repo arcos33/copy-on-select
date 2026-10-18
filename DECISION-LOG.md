@@ -1,5 +1,39 @@
 # Decision Log
 
+Entries below record decisions and evidence at their dates, including interim
+uncertainty. For current verified status read README and PROJECT-STATE.md;
+October 17 ended with user-confirmed working behavior.
+
+## 2026-10-17 — Reconcile original setup history with the completed repair
+
+Keep older evidence without presenting it as newly reproduced or current.
+Document both Chrome fixes (role gating and activation), historical Keychain
+import/trust issues, tool-context failures, and unsuccessful recovery attempts.
+Correct actionable contradictions in install/troubleshooting guidance and stale
+handoff files so agents preserve the working path/identity and diagnose using
+actual process evidence. Remove the old destructive path-recovery template;
+explain recoverable rollback and known backup limitations instead.
+
+## 2026-10-17 — Correct Keychain diagnosis using current evidence
+
+An unrestricted login-keychain check now lists fingerprint `050390D8565BE77F55FAB7558F43BBC5B7E1A3FC` as valid; installed signature verification passes. The certificate expires 2046-10-12 18:56:20 UTC. Earlier zero-identity/untrusted outputs must not be treated as proof this key is absent or needs replacement. README now separates identity/private-key availability, user key-access authorization, trust validation and TCC's saved requirements; records exact fingerprint and discourages broad trust/ACL changes. No Keychain settings were changed for this documentation update.
+
+## 2026-10-17 — Preserve operational lessons in the README
+
+Put the verified maintenance procedure near the top so future agents read it before older installation/recovery notes. Separate source sync from deployment, require packaging/signature checks before permission churn, and use daemon-attributed evidence and user acceptance as completion criteria. Document the known-good local setup and narrow service-specific recovery without turning disruptive resets or path changes into routine update steps.
+
+## 2026-10-17 — Activate Chrome's web accessibility tree
+
+Live trace confirms healthy permissions/event tap, Chrome selection gestures, `AXManualAccessibility` returning attributeUnsupported (-25205), and a hit-test chain containing only AXScrollArea/AXGroup. Chromium's BrowserCrApplication implements `AXEnhancedUserInterface` with a two-second debounce (https://chromium.googlesource.com/chromium/src/+/HEAD/chrome/browser/chrome_browser_application_mac.mm). Use it when manual activation is unsupported, once per process. Retain existing selection validation and safe fallback behavior; don't send blind Cmd+C to work around the missing tree. Release build/signature verification passed; actual user selection remains the acceptance test.
+
+## 2026-10-17 — Confirm permission attribution in TCC logs
+
+The shell-launched `--check` reported Accessibility denied even while the daemon's TCC requests were explicitly allowed. Use daemon-attributed logs or its menu for permission diagnosis. Logs identify the actual remaining blocker as ListenEvent code-requirement mismatch against old leaf certificate `4d06244afa5834357a8e4cf3274b77e8e725cad7`. Current app retains `050390d8565be77f55fab7558f43bbc5b7e1a3fc`; reset only ListenEvent, preserve Accessibility, and await user's new Input Monitoring grant. Removed duplicate running process to leave launchd as the sole launcher.
+
+## 2026-10-17 — Align bundle executable metadata
+
+After the Settings picker failed to add the app, inspected embedded metadata and found `copy-on-select` while the bundle executable was renamed `CopyOnSelect`. Corrected packaging to match the embedded name and retained the original certificate. Signing output changed from `Info.plist=not bound` to `Info.plist entries=8`. This verifies the packaging repair; whether it resolves the permission picker still requires user confirmation. Backups and staging copies now use `.bundle-backup` rather than `.app` to avoid competing app registrations.
+
 ## 2026-10-08 — Scale existing confirmation
 
 Interpret 4× as four times the linear dimensions and font size. Preserve position, timing, appearance and copy behavior. Keep the installed version’s source baseline rather than bundling unrelated remote AX changes into this visual adjustment.

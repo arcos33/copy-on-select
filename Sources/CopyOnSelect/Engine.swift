@@ -77,6 +77,7 @@ final class Engine {
     private func handle(type: CGEventType, event: CGEvent) {
         switch type {
         case .leftMouseDown:
+            DebugTrace.log("mouseDown")
             downLocation = event.location
             hasDown = true
             // Clipboard baseline is captured at gesture START, not mouse-up.
@@ -105,6 +106,8 @@ final class Engine {
             let dragged = (dx * dx + dy * dy).squareRoot() > config.dragThreshold
 
             guard dragged || clickCount >= 2 || shiftHeld else { return }
+
+            DebugTrace.log("selection gesture")
 
             schedule(down: downLocation, up: event.location, wasDrag: dragged)
 
@@ -172,6 +175,7 @@ final class Engine {
         // than from the focused element — is what makes the result attributable
         // to this gesture instead of to whatever is selected elsewhere.
         guard let clicked = AX.element(at: down) else {
+            DebugTrace.log("no accessible element")
             // Nothing under the cursor exposes accessibility, so we cannot tell
             // whether a selection happened. Guessing here is what produces
             // wrong-clipboard bugs.
@@ -182,7 +186,12 @@ final class Engine {
         // the element rather than the event because the event's target-pid is
         // not reliably populated at a session tap, and because the window under
         // the cursor may have changed during the settle delay.
-        guard let pid = AX.pid(of: clicked), !isExcluded(pid: pid) else { return }
+        guard let pid = AX.pid(of: clicked) else {
+            DebugTrace.log("no element owner")
+            return
+        }
+        DebugTrace.log("target=\(NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? "unknown") excluded=\(isExcluded(pid: pid))")
+        guard !isExcluded(pid: pid) else { return }
 
         // Chromium keeps its web-content AX tree off until an assistive client
         // asks. Requested once per process; takes effect for later gestures.
@@ -192,16 +201,19 @@ final class Engine {
             from: clicked, maxDepth: config.maxAncestorWalk, maxCharacters: config.maxCharacters)
         {
         case .secure:
+            DebugTrace.log("secure element; skipped")
             // A password field was on the path. Copy nothing, and never
             // synthesize a keystroke.
             return
 
         case .tooLarge:
+            DebugTrace.log("selection over limit; skipped")
             // A selection exists but exceeds the cap. Falling through to a
             // native copy would copy it anyway, defeating the cap.
             return
 
         case .text(let axText, let selectionBounds):
+            DebugTrace.log("selection found")
             // The gesture must touch the selection. A drag that selects text
             // traces across it, a double-click lands inside it, a shift-click
             // ends at its boundary - but a drag on a card, splitter or
@@ -214,6 +226,7 @@ final class Engine {
                 let selectionBounds, !selectionBounds.isEmpty,
                 !gestureTouches(selectionBounds, down: down, up: up)
             {
+                DebugTrace.log("gesture outside selection bounds; skipped")
                 return
             }
             // Accessibility has confirmed a safe, non-empty selection, and has
@@ -228,6 +241,7 @@ final class Engine {
             if config.yieldToExistingCopy,
                 observedCount != clipboardBaseline, !isOwnWrite(observedCount)
             {
+                DebugTrace.log("clipboard changed elsewhere; yielded")
                 return
             }
 
@@ -266,6 +280,7 @@ final class Engine {
             return
 
         case .none:
+            DebugTrace.log("no accessible selection")
             break
         }
 
@@ -402,6 +417,7 @@ final class Engine {
     /// copy landed ~300ms before our flattened write and was clobbered, with
     /// the earlier worker-queue yield check unable to see it.
     private func commit(_ text: String, force: Bool, guardCount: Int? = nil) {
+        DebugTrace.log("commit scheduled")
         // No separate "freshness" bookkeeping: Clipboard.write already skips a
         // write whose content equals the current clipboard, which is the same
         // check without the false negatives a cached key would introduce.

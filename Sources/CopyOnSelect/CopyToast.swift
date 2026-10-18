@@ -13,6 +13,7 @@ final class CopyToast {
     private init() {}
 
     func show() {
+        DebugTrace.log("show toast")
         precondition(Thread.isMainThread)
 
         dismissWork?.cancel()

@@ -1,11 +1,33 @@
 # Project State
 
-## Current status — 2026-10-14
+## Current status — 2026-10-17
 
-CopyOnSelect’s larger blue-gradient snackbar was installed at `/Applications/CopyOnSelect.app` on October 8. Joel approved the 4× size and blue/white color; final gradient appearance is awaiting confirmation.
+User confirmed CopyOnSelect works after the October 17 repair. The current app
+is `~/Applications/copy-on-select/CopyOnSelect.app`, with executable
+`Contents/MacOS/copy-on-select` and certificate fingerprint
+`050390D8565BE77F55FAB7558F43BBC5B7E1A3FC`. Strict signature verification
+passes, metadata agrees, both daemon-attributed permission checks were allowed,
+and the final trace reached selection, commit and toast. One LaunchAgent
+process remained; temporary diagnostics were disabled.
 
-The October 8 installation passed release build, strict signature verification, staged/installed binary comparison and diff checks. The original signing identity was retained. The approved flat-blue backup is `~/Library/Application Support/copy-on-select/backups/20261008-223825/CopyOnSelect.app`.
+Preserve Chrome's enhanced-UI activation fallback and the earlier container-role
+fix. Read the README agent maintenance runbook before changing the deployment.
+It distinguishes original setup issues from this repair and records Keychain,
+permission, packaging, process and execution-context lessons.
 
-The source now includes the three upstream commits that were pending on October 8. A combined release build and staged diff check passed on October 14. Final visual acceptance of the gradient remains open.
+Recoverable backups currently present under
+`~/Library/Application Support/copy-on-select/backups/`:
 
-NEXT ACTION: Confirm the installed blue gradient looks right to Joel.
+- `pre-update-20261017.bundle-backup`
+- `pre-package-repair-20261017.bundle-backup`
+- `pre-diagnostics-20261017.bundle-backup`
+
+These represent different intermediate states, not equally suitable rollback
+targets. Verify metadata/certificate before restoring one. Historical October 8
+backup paths in session notes were not found in this backup-directory inventory;
+do not assume those files exist on this Mac.
+
+The earlier October 14 repository sync did not deploy an app. User authorized
+committing and pushing the current repair and documentation on October 17;
+consult Git history/remote status for publication state. Functional acceptance
+is confirmed; no separate new color/gradient redesign was requested.
