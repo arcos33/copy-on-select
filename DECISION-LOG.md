@@ -1,5 +1,13 @@
 # Decision Log
 
+## 2026-10-18 — One Paste action with explicit release
+
+Joel approved hold/slide/release and explicitly rejected a plain-text choice. Use left-button hold with a gap between the pointer and button so a stationary release cancels. The mouse-only tap is now an active tap: native down passes through, pre-hold drags remain ordinary, post-activation drag events are consumed, and the real up is delivered at the initial caret. This preserves the down/up pair without sending an extra synthetic click. Native Command-V is sent only after release and revalidation of the same focused field, insertion range, foreground process and clipboard generation. No clipboard rewriting or history is introduced.
+
+Cancelled/stale copy work must not overwrite the clipboard while the paste gesture is active, so generation is checked at the actual copy commit as well as during resolution. The existing Chrome activation and role handling are retained. Apps excluded from copying remain excluded from hold-paste for this first release.
+
+This Mac has Command Line Tools without XCTest; `swift test` failed with `no such module XCTest`. Use the checked-in standalone Swift test runner; it exercises cancellation, pointer jitter, drag-out-and-back, stale lookups, modifiers, single-shot paste and display-edge placement. The configured PiKVM tool supports continuous drag but not hold-then-slide; Joel performed the actual gesture check and confirmed success, cancellation, and automatic copying. Do not change PiKVM just to automate this check.
+
 ## 2026-10-18 — Version label and machine-specific deployment
 
 Joel approved 1.1.0, treating the earlier app as 1.0.0. Read the menu version from bundle metadata. Synced October 17 installation notes describe the jediOne Mac, not the Mac mini: live LaunchAgent/signature inspection established /Applications/CopyOnSelect.app and DFB4CDB9E1186449F600B5DC796C5B89B03E0865 here. Preserve machine-specific identities; a zero-valid-identities listing did not prevent successful staged signing with this existing certificate and strict verification.

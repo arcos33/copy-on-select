@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0 build 3 — 2026-10-18
+
+- Added hold, slide and release for a single Paste button in supported text fields, preserving the clipboard's formats.
+- Added destination/clipboard validation, drag cancellation, mouse-up pairing and stale-copy protection during paste gestures.
+- Corrected CLI version reporting to use bundle metadata, matching the menu.
+- Added ten deterministic gesture/placement checks that run with Command Line Tools via `./scripts/test.sh`.
+
 ## 1.1.0 — 2026-10-18
 
 - Added app version at the top of the menu; bumped metadata to 1.1.0 (build 2).

@@ -2,9 +2,13 @@
 
 ## Mac mini update — 2026-10-18
 
-Version 1.1.0 (build 2) installed at /Applications/CopyOnSelect.app; menu includes the version from bundle metadata. Release build, signature, installed-binary comparison and one running LaunchAgent process verified. Original Mac mini certificate retained. Backup and details in SESSION-LOG.md. Joel confirmed the menu/version update works on 2026-10-18.
+**1.1.0 build 3 is installed and user-accepted.** Hold left-click still for half a second in an editable field, slide onto the single Paste button, then release. Release outside cancels. Joel confirmed paste once, cancellation, and normal automatic selection-copy with the blue popup.
 
-Next action: scope the proposed hold-to-paste gesture before implementation. The October 17 installation below belongs to the jediOne Mac, not this Mac mini.
+Release build, ten deterministic checks, light/dark button rendering, strict signature, installed-binary comparison and one running LaunchAgent process verified. App: `/Applications/CopyOnSelect.app`; original Mac mini certificate retained. Rollback app, LaunchAgent and hash: `~/Library/Application Support/copy-on-select/backups/pre-hold-paste-20261018-131924/`.
+
+Joel authorized committing the accepted hold-paste feature and publishing it together with version-label commit `9c3bb8b` on October 18. Use Git remote status for publication state. Broader app and monitor coverage remains untested; unsupported/read-only/secure targets and existing excluded apps are intentionally skipped. Tests: `./scripts/test.sh` (Command Line Tools; XCTest unavailable here).
+
+Next action: observe normal use and investigate any app-specific compatibility reports. The October 17 installation below belongs to the jediOne Mac, not this Mac mini.
 
 ## Current status — 2026-10-17
 

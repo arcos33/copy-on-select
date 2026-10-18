@@ -1,5 +1,16 @@
 # Specs
 
+## Hold, slide, release to paste — 2026-10-18
+
+- Joel approved a single **Paste** action; no plain-text choice and no automatic paste on a stationary hold.
+- Hold the left mouse button still for 0.5 seconds in a supported editable field; slide onto Paste and release to paste once. Release outside to cancel.
+- Moving more than 6 pt before activation cancels recognition for that gesture. Ordinary clicks, double-clicks, modified clicks, selection drags and existing exclusions retain their normal behavior.
+- The 124 × 48 pt button appears 18 pt beside the press, flips left near a screen edge and stays in the visible display area. System light/dark colors, 17 pt semibold label, highlighted hover state. No clipboard preview, history or disk storage.
+- Focus must match the hit-tested editable field; secure/read-only/unknown targets are skipped. Holding already-selected text remains a native text-drag gesture. Clipboard changes or a changed destination cancel the pending paste.
+- Paste uses native Command-V with the existing clipboard formats. Pause disables observation and cancels pending actions. No keyboard events are monitored.
+- Version remains the agreed feature release **1.1.0**, build **3**. CLI and menu read the same bundle version.
+- Joel confirmed successful paste, release-outside cancellation, and unchanged automatic selection-copy with its blue Copied popup on 2026-10-18. Broader app/monitor coverage remains unverified.
+
 ## Version numbering — 2026-10-18
 
 - Joel treats the existing app as 1.0.0 and approved 1.1.0 for this release. Bundle build number: 2.

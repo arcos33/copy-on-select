@@ -1,18 +1,20 @@
 import CoreGraphics
 import Foundation
 
-/// A listen-only tap on left mouse down/up.
+/// Mouse-only tap. Ordinary input passes through; an activated hold-to-paste
+/// gesture may consume drag events and redirect its matching mouse-up.
 ///
 /// Deliberately NOT tapping .flagsChanged: that is a keyboard event type, which
 /// would make this binary keylogger-shaped to anyone auditing it, and Secure
 /// Input Mode suppresses those events anyway. Modifier state is read on demand
 /// via CGEventSource.flagsState instead.
 final class EventTap {
-    typealias Handler = (CGEventType, CGEvent) -> Void
+    typealias Handler = (CGEventType, CGEvent) -> Bool
 
     private var port: CFMachPort?
     private var source: CFRunLoopSource?
     private let handler: Handler
+    var onInterruption: (() -> Void)?
     /// What the user asked for. The kernel can disable the tap behind our back,
     /// and the re-enable path must restore *this* state rather than
     /// unconditionally switching observation back on while paused.
@@ -32,6 +34,8 @@ final class EventTap {
     func start() -> Bool {
         let mask: CGEventMask =
             (1 << CGEventType.leftMouseDown.rawValue) | (1 << CGEventType.leftMouseUp.rawValue)
+            | (1 << CGEventType.leftMouseDragged.rawValue) | (1 << CGEventType.rightMouseDown.rawValue)
+            | (1 << CGEventType.otherMouseDown.rawValue) | (1 << CGEventType.scrollWheel.rawValue)
 
         let callback: CGEventTapCallBack = { _, type, event, refcon in
             guard let refcon else { return Unmanaged.passUnretained(event) }
@@ -41,19 +45,19 @@ final class EventTap {
             // input events. Without re-enabling, the app silently stops working
             // after the first stall.
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                tap.onInterruption?()
                 tap.reenable()
                 return Unmanaged.passUnretained(event)
             }
 
-            tap.handler(type, event)
-            return Unmanaged.passUnretained(event)
+            return tap.handler(type, event) ? nil : Unmanaged.passUnretained(event)
         }
 
         guard
             let port = CGEvent.tapCreate(
                 tap: .cgSessionEventTap,
                 place: .headInsertEventTap,
-                options: .listenOnly,
+                options: .defaultTap,
                 eventsOfInterest: mask,
                 callback: callback,
                 userInfo: Unmanaged.passUnretained(self).toOpaque())

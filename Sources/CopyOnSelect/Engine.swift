@@ -30,6 +30,15 @@ final class Engine {
     private let config: Config
     private var tap: EventTap?
     private var pending: DispatchWorkItem?
+    private lazy var holdPaste: HoldPaste = {
+        let paste = HoldPaste(config: config)
+        paste.didActivate = { [weak self] in
+            self?.hasDown = false
+            self?.pending?.cancel()
+            _ = self?.nextGeneration()
+        }
+        return paste
+    }()
 
     /// Gesture state. Only touched from the event-tap callback, which runs on
     /// the main run loop, so no synchronisation is needed.
@@ -49,7 +58,13 @@ final class Engine {
     func start() -> Bool {
         guard tap == nil else { return true }
         let tap = EventTap { [weak self] type, event in
-            self?.handle(type: type, event: event)
+            self?.handle(type: type, event: event) ?? false
+        }
+        tap.onInterruption = { [weak self] in
+            self?.holdPaste.cancel()
+            self?.hasDown = false
+            self?.pending?.cancel()
+            _ = self?.nextGeneration()
         }
         guard tap.start() else { return false }
         self.tap = tap
@@ -63,6 +78,10 @@ final class Engine {
     /// paused app genuinely observes nothing.
     func setEnabled(_ enabled: Bool) {
         isEnabled = enabled
+        holdPaste.cancel()
+        hasDown = false
+        pending?.cancel()
+        _ = nextGeneration()
         tap?.setEnabled(enabled)
     }
 
@@ -74,12 +93,19 @@ final class Engine {
 
     // MARK: - Event handling (main run loop; must stay trivial)
 
-    private func handle(type: CGEventType, event: CGEvent) {
+    private func handle(type: CGEventType, event: CGEvent) -> Bool {
+        switch holdPaste.handle(type, event, enabled: isEnabled) {
+        case .swallow: return true
+        case .finished: hasDown = false; return false
+        case .ordinary: break
+        }
         switch type {
         case .leftMouseDown:
             DebugTrace.log("mouseDown")
             downLocation = event.location
             hasDown = true
+            pending?.cancel()
+            _ = nextGeneration()
             // Clipboard baseline is captured at gesture START, not mouse-up.
             // A user who finishes a drag and hits Cmd+C in one motion can land
             // the copy before a mouse-up baseline would be taken, absorbing it
@@ -91,11 +117,11 @@ final class Engine {
             }
 
         case .leftMouseUp:
-            guard isEnabled else { return }
+            guard isEnabled else { return false }
             // Without a matching mouse-down (first event after launch, or after
             // the tap was re-enabled mid-drag) the down point is stale and the
             // hit test would target an unrelated element.
-            guard hasDown else { return }
+            guard hasDown else { return false }
             hasDown = false
 
             let clickCount = event.getIntegerValueField(.mouseEventClickState)
@@ -105,7 +131,7 @@ final class Engine {
             let dy = event.location.y - downLocation.y
             let dragged = (dx * dx + dy * dy).squareRoot() > config.dragThreshold
 
-            guard dragged || clickCount >= 2 || shiftHeld else { return }
+            guard dragged || clickCount >= 2 || shiftHeld else { return false }
 
             DebugTrace.log("selection gesture")
 
@@ -114,6 +140,7 @@ final class Engine {
         default:
             break
         }
+        return false
     }
 
     /// Whether the gesture plausibly interacted with the selection's on-screen
@@ -247,7 +274,7 @@ final class Engine {
 
             guard shouldUseNativeCopy(pid: pid) else {
                 guard isCurrent(gen) else { return }
-                commit(axText, force: false, guardCount: observedCount)
+                commit(axText, force: false, generation: gen, guardCount: observedCount)
                 return
             }
 
@@ -272,9 +299,9 @@ final class Engine {
                     // Force the rewrite: the string already matches what the
                     // app put on the pasteboard, and rewriting is what strips
                     // its styling flavors.
-                    self.commit(native, force: self.config.plainTextOnly)
+                    self.commit(native, force: self.config.plainTextOnly, generation: gen)
                 } else {
-                    self.commit(axText, force: false)
+                    self.commit(axText, force: false, generation: gen)
                 }
             }
             return
@@ -303,7 +330,7 @@ final class Engine {
                 native.count <= self.config.maxCharacters
             else { return }
             guard self.isCurrent(gen) else { return }
-            self.commit(native, force: self.config.plainTextOnly)
+            self.commit(native, force: self.config.plainTextOnly, generation: gen)
         }
     }
 
@@ -416,14 +443,14 @@ final class Engine {
     /// and the write executing. The recorded failure: the user's rich manual
     /// copy landed ~300ms before our flattened write and was clobbered, with
     /// the earlier worker-queue yield check unable to see it.
-    private func commit(_ text: String, force: Bool, guardCount: Int? = nil) {
+    private func commit(_ text: String, force: Bool, generation gen: Int, guardCount: Int? = nil) {
         DebugTrace.log("commit scheduled")
         // No separate "freshness" bookkeeping: Clipboard.write already skips a
         // write whose content equals the current clipboard, which is the same
         // check without the false negatives a cached key would introduce.
         let concealed = config.markClipboardConcealed
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
+            guard let self, self.isEnabled, self.isCurrent(gen) else { return }
             if let guardCount {
                 let current = Clipboard.changeCount
                 if current != guardCount, !self.isOwnWrite(current) { return }

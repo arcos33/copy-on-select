@@ -1,5 +1,13 @@
 # copy-on-select
 
+## Hold to paste — 1.1.0
+
+Hold the left mouse button still for half a second in an editable text field. Slide onto **Paste** and release to paste the current clipboard. Release outside to cancel. Moving before the button appears remains a normal selection drag. There is only one Paste action; original clipboard formatting is preserved. Standard Command-V and context menus still work.
+
+Secure fields, read-only content and the existing excluded apps do not show the button. Chrome may need a subsequent gesture after its accessibility tree activates. **Pause** in the app menu pauses both automatic copying and hold-to-paste.
+
+Validation: `./scripts/test.sh` runs ten gesture/placement checks with Swift Command Line Tools; `swift build -c release` builds the app. Actual hold/slide/release, cancellation and copy-on-select were confirmed by Joel on the Mac mini on October 18.
+
 ## Pick up here
 
 **Last updated:** 2026-10-17

@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 
-let version = "0.1.0"
+let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
 
 func usage() {
     print(

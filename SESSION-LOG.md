@@ -1,5 +1,11 @@
 # Session Log
 
+## 2026-10-18 — Hold-to-paste implemented and accepted
+
+Implemented the approved single Paste button, using a 0.5-second left-button hold followed by slide/release. No plain-text action. Release build, ten gesture/placement checks, plist/signature checks and staged/installed binary comparison passed. Offscreen light/dark idle/highlight rendering was inspected. Installed 1.1.0 build 3 at /Applications/CopyOnSelect.app with the same certificate; one LaunchAgent process verified. No permission reset or config changes. Backup: ~/Library/Application Support/copy-on-select/backups/pre-hold-paste-20261018-131924/ (app, LaunchAgent and binary hash).
+
+Joel confirmed “Pastes once; cancelling works” and then “Yes, automatic copying still works” with the usual blue popup. Broader app/monitor coverage was not tested. Implementation is local/uncommitted; earlier version-label commit 9c3bb8b remains unpushed. No task-created desktop windows were opened.
+
 ## 2026-10-18 — Visible version number
 
 Implemented and installed 1.1.0 (build 2) on the Mac mini. Release build, plist validation, strict signature verification, staged/installed binary comparison and diff check passed. LaunchAgent runs one process. Preserved original certificate DFB4CDB9E1186449F600B5DC796C5B89B03E0865 and app path /Applications/CopyOnSelect.app. Executable and LaunchAgent now consistently use copy-on-select to match embedded metadata. Backup: ~/Library/Application Support/copy-on-select/backups/version-1.1.0-20261018/. PiKVM session ended without capturing the app menu; Joel subsequently confirmed the update works and authorized committing the changes.
@@ -81,3 +87,7 @@ No new implementation or durable decisions since the previous close. Rechecked t
 ## 2026-10-14 — Repository sync
 
 Fast-forwarded to the latest `origin/main`, preserving the local toast changes and six project records. The combined release build and staged diff check passed. Committed the toast source, README, and project records. The installed app was not rebuilt or restarted during this repository sync; final gradient appearance confirmation remains open.
+
+## 2026-10-18 — Publish accepted Paste feature
+
+Joel authorized committing hold-to-paste and pushing all pending changes, including version-label commit 9c3bb8b. Reviewed the scoped working tree, checked whitespace and fetched origin before publication. The prior release build, ten automated checks and Joel's live paste/cancellation/copy-on-select confirmation remain the validation baseline; no app changes or restart were needed for publication.

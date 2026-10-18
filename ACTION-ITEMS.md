@@ -18,3 +18,10 @@
 
 - Implemented and installed: menu version label, metadata 1.1.0/build 2.
 - Confirmed by Joel: version update works on Mac mini (2026-10-18).
+
+## Hold-to-paste — 2026-10-18
+
+- Done: implemented and installed single Paste button, hold/slide/release, no plain-text choice.
+- Confirmed by Joel: pastes once, cancelling works, normal copy-on-select and blue popup still work.
+- Publication authorized on 2026-10-18: commit the accepted feature and push it with the prior version-label commit.
+- Future coverage: additional apps and multi-monitor hardware; fail closed on unsupported targets.
