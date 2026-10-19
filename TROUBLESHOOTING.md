@@ -293,3 +293,33 @@ and note that unnotarized Developer ID actively breaks Accessibility (above).
 Notarizing the local build would work and would expose nothing publicly, but it
 adds a several-minute notarization round-trip to *every* rebuild. Currently
 judged not worth it.
+
+## GitHub sync: saved credential exists but cannot be read
+
+On 2026-10-19, the Orca remote launcher hosted this Codex process. It used
+`/opt/homebrew/bin/gh` 2.89.0, HOME `/Users/samanthashiro`, and default
+`~/.config/gh/hosts.yml`, with no GH_TOKEN/GITHUB_TOKEN overrides. The config
+listed arcos33, sammori77 and hikarisushi; hikarisushi was active.
+
+A metadata-only lookup succeeded for service `gh:github.com`, account `arcos33`,
+in the login Keychain. The item therefore exists. `gh auth token` could not
+retrieve it, and direct secret retrieval exited 36 without diagnostic text.
+That exit code is consistent with the truncated OSStatus -25308, “User
+interaction is not allowed”; it does not conclusively identify the access cause.
+The saved token's validity and access from native Codex remain unverified.
+
+Before claiming a token is missing/expired or asking for a replacement:
+
+1. Compare executable/version, HOME and config paths, override presence without
+   values, and parent execution context in the working and failing clients.
+2. Check Keychain item metadata without `-w` or `-g`; this distinguishes item
+   existence from permission to retrieve its secret.
+3. If retrieval succeeds, keep the token in memory and verify `gh api user`
+   returns the repository owner before using it for a scoped Git subprocess.
+4. If retrieval fails, report an access limitation. Do not switch global
+   accounts, replace credentials, or loosen Keychain permissions automatically.
+
+The accessible 1Password candidates checked in this session did not yield a
+verified arcos33 token. That does not negate the existing Keychain item. The
+October 18 successful scoped push remains historical evidence, not proof of
+current access from every client. No token values were recorded.

@@ -6,9 +6,9 @@
 
 Release build, ten deterministic checks, light/dark button rendering, strict signature, installed-binary comparison and one running LaunchAgent process verified. App: `/Applications/CopyOnSelect.app`; original Mac mini certificate retained. Rollback app, LaunchAgent and hash: `~/Library/Application Support/copy-on-select/backups/pre-hold-paste-20261018-131924/`.
 
-Published to `arcos33/copy-on-select` on October 18: version label `9c3bb8b` and Paste feature `872a619`. The publication close-out documentation is included in the October 19 repository sync. Broader app and monitor coverage remains untested; unsupported/read-only/secure targets and existing excluded apps are intentionally skipped. Tests: `./scripts/test.sh` (Command Line Tools; XCTest unavailable here).
+Published to `arcos33/copy-on-select` on October 18: version label `9c3bb8b` and Paste feature `872a619`. October 19 close-out commit `a33559d` is local and not pushed. Sync is blocked by credential retrieval in the Orca-hosted session: the arcos33 Keychain item exists, but its token validity is unverified. See TROUBLESHOOTING.md. Broader app and monitor coverage remains untested; unsupported/read-only/secure targets and existing excluded apps are intentionally skipped. Tests: `./scripts/test.sh` (Command Line Tools; XCTest unavailable here).
 
-NEXT ACTION: Wait for Joel’s next request; investigate compatibility only if reported. The October 17 installation below belongs to the jediOne Mac, not this Mac mini.
+NEXT ACTION: Complete the pending documentation push from a context that can retrieve and verify the existing arcos33 Keychain credential. The October 17 installation below belongs to the jediOne Mac, not this Mac mini.
 
 ## Other Mac baseline (jediOne) — 2026-10-17
 

@@ -73,3 +73,7 @@ Joel approved blue and requested an iMessage-like gradient. Use AppKit NSGradien
 ## 2026-10-18 — Scope GitHub authentication to the repository owner
 
 The initial push failed with HTTP 403 because the active gh account was hikarisushi. Retrieved the saved arcos33 token in memory, verified its identity through the GitHub API, and scoped GH_TOKEN plus the gh credential helper to the push subprocess. Push succeeded without changing the global active account or credentials. For future publication, verify the repository owner account rather than assuming the active business login has access.
+
+## 2026-10-19 — Distinguish credential existence from execution-context access
+
+Corrected the earlier inference that no arcos33 credential was available: metadata lookup confirmed the GitHub CLI item in the login Keychain. Orca-hosted Codex could not retrieve its secret; native-client comparison and token validity remain unverified. Exit 36 is consistent with interaction-not-allowed OSStatus, not conclusive proof of the cause. Diagnose execution context and metadata before searching for replacement tokens. Preserve global credentials and permissions. See TROUBLESHOOTING.md for evidence and the diagnostic order.

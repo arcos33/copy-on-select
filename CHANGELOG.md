@@ -37,3 +37,7 @@
 - Replaced rejected teal with charcoal `#333333` and soft white `#F5F5F5`; preserved accepted size and timing.
 - Switched to requested iMessage-style blue `#007AFF` with white text after charcoal was judged too dark.
 - Added a vertical blue gradient, lighter at top and deeper at bottom, to the accepted large blue snackbar.
+
+## 2026-10-19 — Credential troubleshooting documentation
+
+- Documented existing GitHub Keychain item versus blocked secret retrieval, safe diagnostic order and pending repository sync.

@@ -99,3 +99,7 @@ Committed the accepted Paste feature as 872a619 and pushed it together with vers
 ## 2026-10-19 — Repository sync
 
 Reviewed and committed the five pending publication close-out documentation files. Fetched origin and confirmed no incoming commits before syncing. Whitespace validation passed; no application code or installed app changed.
+
+## 2026-10-19 — Correct GitHub credential diagnosis
+
+Joel requested durable documentation after the sync attempt. Confirmed the arcos33 Keychain item's existence through metadata; secret retrieval remains blocked in this Orca-hosted context. Updated troubleshooting, status, action items and shared agent guidance to distinguish existence, retrieval and token validity. The sync commit remains local; no app changes or credential/permission changes were made. Documentation checked with git diff --check.

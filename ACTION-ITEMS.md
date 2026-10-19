@@ -2,6 +2,8 @@
 
 ## Open
 
+- 2026-10-19: Finish the pending documentation sync after resolving Keychain access in the execution context. Existing arcos33 item confirmed; token validity unverified. Do not request a replacement token based only on retrieval failure.
+
 - No blocking functional issue: user confirmed working behavior on 2026-10-17.
 - If the user asks for further visual tuning, confirm the precise appearance change; functional acceptance is not an instruction to redesign the snackbar.
 - Proposal, not approved: if further appearance tuning is requested, consider a lightweight preview or configurable palette. This session required four color/gradient rebuilds and restarts; a preview could reduce that cycle. Do not implement as part of close-out.
