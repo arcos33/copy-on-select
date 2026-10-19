@@ -69,3 +69,7 @@ Joel rejected charcoal as too dark and requested the familiar blue associated wi
 ## 2026-10-08 — Blue gradient
 
 Joel approved blue and requested an iMessage-like gradient. Use AppKit NSGradient in a background NSView, clipped by the existing rounded layer: #0064E6 bottom to #2D92FF top. White-text contrast remains at least 3.15:1 for the existing large semibold label. Preserve accepted dimensions and timing. Backup of approved flat-blue app: `~/Library/Application Support/copy-on-select/backups/20261008-223825/CopyOnSelect.app`.
+
+## 2026-10-18 — Scope GitHub authentication to the repository owner
+
+The initial push failed with HTTP 403 because the active gh account was hikarisushi. Retrieved the saved arcos33 token in memory, verified its identity through the GitHub API, and scoped GH_TOKEN plus the gh credential helper to the push subprocess. Push succeeded without changing the global active account or credentials. For future publication, verify the repository owner account rather than assuming the active business login has access.

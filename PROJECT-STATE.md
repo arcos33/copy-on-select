@@ -6,11 +6,11 @@
 
 Release build, ten deterministic checks, light/dark button rendering, strict signature, installed-binary comparison and one running LaunchAgent process verified. App: `/Applications/CopyOnSelect.app`; original Mac mini certificate retained. Rollback app, LaunchAgent and hash: `~/Library/Application Support/copy-on-select/backups/pre-hold-paste-20261018-131924/`.
 
-Joel authorized committing the accepted hold-paste feature and publishing it together with version-label commit `9c3bb8b` on October 18. Use Git remote status for publication state. Broader app and monitor coverage remains untested; unsupported/read-only/secure targets and existing excluded apps are intentionally skipped. Tests: `./scripts/test.sh` (Command Line Tools; XCTest unavailable here).
+Published to `arcos33/copy-on-select` on October 18: version label `9c3bb8b` and Paste feature `872a619`. The publication close-out documentation is included in the October 19 repository sync. Broader app and monitor coverage remains untested; unsupported/read-only/secure targets and existing excluded apps are intentionally skipped. Tests: `./scripts/test.sh` (Command Line Tools; XCTest unavailable here).
 
-Next action: observe normal use and investigate any app-specific compatibility reports. The October 17 installation below belongs to the jediOne Mac, not this Mac mini.
+NEXT ACTION: Wait for Joel’s next request; investigate compatibility only if reported. The October 17 installation below belongs to the jediOne Mac, not this Mac mini.
 
-## Current status — 2026-10-17
+## Other Mac baseline (jediOne) — 2026-10-17
 
 User confirmed CopyOnSelect works after the October 17 repair. The current app
 is `~/Applications/copy-on-select/CopyOnSelect.app`, with executable

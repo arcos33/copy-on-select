@@ -13,7 +13,7 @@
 
 ## Version numbering — 2026-10-18
 
-- Joel treats the existing app as 1.0.0 and approved 1.1.0 for this release. Bundle build number: 2.
+- Joel treats the existing app as 1.0.0 and approved 1.1.0 for this release. Version-label-only release used build 2; the accepted hold-paste release uses build 3.
 - Menu begins with a disabled `CopyOnSelect v1.1.0` label, read from CFBundleShortVersionString rather than duplicated in code.
 
 ## Local installation — 2026-10-17

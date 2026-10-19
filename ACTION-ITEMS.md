@@ -3,7 +3,6 @@
 ## Open
 
 - No blocking functional issue: user confirmed working behavior on 2026-10-17.
-- User authorized committing and pushing the repair and documentation on 2026-10-17; check Git history/remote status for publication state.
 - If the user asks for further visual tuning, confirm the precise appearance change; functional acceptance is not an instruction to redesign the snackbar.
 - Proposal, not approved: if further appearance tuning is requested, consider a lightweight preview or configurable palette. This session required four color/gradient rebuilds and restarts; a preview could reduce that cycle. Do not implement as part of close-out.
 
@@ -23,5 +22,5 @@
 
 - Done: implemented and installed single Paste button, hold/slide/release, no plain-text choice.
 - Confirmed by Joel: pastes once, cancelling works, normal copy-on-select and blue popup still work.
-- Publication authorized on 2026-10-18: commit the accepted feature and push it with the prior version-label commit.
+- Published on 2026-10-18: feature `872a619` and version-label `9c3bb8b`; local/remote main matched after push.
 - Future coverage: additional apps and multi-monitor hardware; fail closed on unsupported targets.
