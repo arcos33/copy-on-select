@@ -1,5 +1,25 @@
 # Session Log
 
+## 2026-10-19 — jediOne app update accepted; reusable update instructions
+
+Pulled main to `37a4689`, then built, tested and deployed 1.1.0 build 3 at
+`~/Applications/copy-on-select/CopyOnSelect.app` using the original certificate.
+Ten gesture/placement checks, strict signing, signed staged/installed executable
+comparison and unchanged config/LaunchAgent checks passed. Removed the manually
+launched old process before replacement; one launchd-managed process started.
+Daemon-attributed TCC logs allowed Accessibility and ListenEvent; shell `--check`
+reported a separate Orca Terminal Host permission verdict, requiring no grant reset.
+Backup: `~/Library/Application Support/copy-on-select/backups/pre-update-20261019-121754/`.
+Staging app renamed `.bundle-backup`; diagnostics remained disabled.
+
+Computer Use did not approve TextEdit access. The user subsequently confirmed
+“it's working perfectly now,” completing acceptance. No restart after acceptance.
+At the user's request, added root AGENTS.md and UPDATE.md so “update the app”
+triggers complete deployment with concrete steps and known troubleshooting
+lessons. Reconciled current acceptance in README, PROJECT-STATE, CHANGELOG and
+ACTION-ITEMS. User authorized committing and pushing these documentation changes;
+check Git history and upstream status for publication state.
+
 ## 2026-10-18 — Hold-to-paste implemented and accepted
 
 Implemented the approved single Paste button, using a 0.5-second left-button hold followed by slide/release. No plain-text action. Release build, ten gesture/placement checks, plist/signature checks and staged/installed binary comparison passed. Offscreen light/dark idle/highlight rendering was inspected. Installed 1.1.0 build 3 at /Applications/CopyOnSelect.app with the same certificate; one LaunchAgent process verified. No permission reset or config changes. Backup: ~/Library/Application Support/copy-on-select/backups/pre-hold-paste-20261018-131924/ (app, LaunchAgent and binary hash).

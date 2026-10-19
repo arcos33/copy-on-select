@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-19 — jediOne Mac deployment
+
+- Added root AGENTS.md routing for “update the app” and a concrete UPDATE.md deployment runbook, including source sync, backups, original-identity signing, process teardown, permission attribution and acceptance.
+
+- Installed 1.1.0 build 3 at the existing app path with its original signing identity, preserving config and LaunchAgent; backed up the prior deployment.
+- Release build, ten deterministic checks, strict signatures and staged/installed executable comparison passed. One managed process runs; daemon-attributed logs allow Accessibility and Input Monitoring. The user subsequently confirmed the updated app works perfectly; no further restart was performed.
+
 ## 1.1.0 build 3 — 2026-10-18
 
 - Added hold, slide and release for a single Paste button in supported text fields, preserving the clipboard's formats.

@@ -10,9 +10,11 @@ Validation: `./scripts/test.sh` runs ten gesture/placement checks with Swift Com
 
 ## Pick up here
 
-**Last updated:** 2026-10-17
+**Last updated:** 2026-10-19
 
 ### Done
+- Updated this Mac to 1.1.0 build 3 on October 19; the user confirmed “it's working perfectly now.” Original path, signing identity, config and permissions preserved.
+- Future “update the app” requests: follow [UPDATE.md](UPDATE.md) for the full installed-app deployment; [AGENTS.md](AGENTS.md) routes agents there automatically.
 - Installed corrected bundle at `~/Applications/copy-on-select/CopyOnSelect.app`, retaining the original signing certificate. Executable and embedded metadata agree; strict signature verification passes.
 - Re-granted Accessibility and Input Monitoring; daemon-attributed TCC logs allow both.
 - Fixed Chrome accessibility activation with `AXEnhancedUserInterface` when `AXManualAccessibility` is unsupported. User's latest selection produced `selection found`, `commit scheduled`, and `show toast` in the trace.
@@ -29,14 +31,21 @@ Validation: `./scripts/test.sh` runs ten gesture/placement checks with Swift Com
 
 ## Agent maintenance runbook — read before updating or troubleshooting
 
-This installation was verified working by the user on **2026-10-17**, on macOS
-27.2 (26B5101f). Preserve the working setup. The paths and certificate below
+The user confirmed **1.1.0 build 3** working on **2026-10-19**. The prior
+October 17 repair baseline recorded macOS 27.2 (26B5101f). Preserve the working setup. The paths and certificate below
 are specific to this Mac; on another machine, discover its existing setup
 instead of copying these values. Read this section before following older
 installation or troubleshooting notes, which include historical paths and
 superseded diagnoses.
 
 ### Known-good installation
+
+**October 19 deployment:** this Mac now has **1.1.0 build 3** from commit
+`37a4689`, using the same path and identity below. Build, ten deterministic
+checks, strict signature, installed-byte comparison and daemon-attributed
+Accessibility/Input Monitoring grants passed. The user subsequently confirmed
+“it's working perfectly now.” See [PROJECT-STATE.md](PROJECT-STATE.md) for the
+backup and verification details.
 
 | Item | Verified value |
 |---|---|
@@ -211,6 +220,10 @@ time; this checkpoint and the current installation specs describe today's state.
   read the trace; it is not by itself confirmation that copying succeeded.
 
 ### Safe update procedure
+
+For an explicit “update the app” request, use [UPDATE.md](UPDATE.md) for the
+command sequence and completion criteria. Perform the full deployment, preserving
+this machine's existing identity and settings; a Git pull alone is insufficient.
 
 1. **Check source and deployment separately.** Fetch the remote and inspect
    local changes/ahead/behind state. A synced Git repo says nothing about the

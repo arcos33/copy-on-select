@@ -1,5 +1,28 @@
 # Project State
 
+## jediOne Mac update — 2026-10-19
+
+Installed source commit `37a4689` as **1.1.0 build 3** at the existing
+`~/Applications/copy-on-select/CopyOnSelect.app` path, retaining certificate
+`050390D8565BE77F55FAB7558F43BBC5B7E1A3FC` and unchanged config/LaunchAgent.
+Release build and all ten gesture/placement checks passed. Staged and installed
+signatures passed strict verification with identical designated requirements;
+signed executables matched (SHA-256
+`1a7a0d15cc6a1e1975f26b7789007bc31747e8e0c7066b3fc8499c69ae03c6ad`).
+One launchd-managed process started (PID 92697); daemon-attributed TCC logs
+confirmed Accessibility and ListenEvent allowed. A shell-launched `--check`
+reported Accessibility denied under Orca Terminal Host attribution; this is
+distinct from the actual daemon's allowed verdict and prompted no resets.
+
+Backup: `~/Library/Application Support/copy-on-select/backups/pre-update-20261019-121754/`
+(app stored as `CopyOnSelect.bundle-backup`, plus plist, config and deployment
+metadata). Temporary staging app renamed to `.bundle-backup`; diagnostics
+remain disabled. Computer Use did not approve TextEdit access, so the agent
+could not perform the UI acceptance test. The user subsequently confirmed
+“it's working perfectly now,” completing acceptance without another restart.
+Future updates follow UPDATE.md, discovered through root AGENTS.md. Check Git
+status and upstream history for documentation publication state.
+
 ## Mac mini update — 2026-10-18
 
 **1.1.0 build 3 is installed and user-accepted.** Hold left-click still for half a second in an editable field, slide onto the single Paste button, then release. Release outside cancels. Joel confirmed paste once, cancellation, and normal automatic selection-copy with the blue popup.
